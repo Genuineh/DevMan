@@ -21,9 +21,7 @@ pub enum StorageError {
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
-    /// Git operation error
-    #[error("Git error: {0}")]
-    Git(#[from] git2::Error),
+
 
     /// Item not found
     #[error("Not found: {0}")]

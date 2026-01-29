@@ -12,7 +12,7 @@ DevMan 是一个面向 AI 的工作管理与质量保证基础设施，目标是
 
 核心特性
 - 结构化的 **Goal / Project / Phase / Task / WorkRecord** 数据模型
-- Git + JSON 的轻量存储后端 (`GitJsonStorage`)
+- 文件 + JSON 的轻量存储后端 (`GitJsonStorage`)
 - 可扩展的 **QualityEngine**（支持通用检查和自定义检查）
 - 基本的 **KnowledgeService** 和 **ProgressTracker** 实现
 - 内置工具执行（`cargo`、`npm`、`git`、`fs`）和 CLI 用法
@@ -88,7 +88,8 @@ devman-ai --help         # MCP server（如果已安装）
 > **变更说明**：默认情况下，`GitJsonStorage` **不会** 自动初始化或管理仓库；存储为基于文件的 JSON 存储，项目通过在仓库根目录下创建 `.devman/` 文件夹来管理本地数据。
 >
 > - 元数据：`.devman/meta/`（每个对象的版本标记，仅保存 `meta.json` 信息，包含版本号与时间戳）
-> - 归档：`.devman/archives/`（按版本保存元信息记录，**不保存对象全量**，仅指向对象文件路径）
+>
+> 全量版本快照由项目自身的 Git 仓库负责管理（如需要），存储系统不再维护或写入任何 `archives/` 快照文件。
 >
 > 如果希望由存储自动管理 Git（在极少数场景需要），可以在代码中显式启用：
 >
@@ -115,7 +116,7 @@ cargo run -p devman-ai
 
 - 单元测试：`cargo test --all`
 - 代码审查与质量：已有质量检查模型与执行框架，可扩展更多检查器
-- 本地存储目录：`.devman/`（Git 仓库）
+- 本地存储目录：`.devman/`（文件存储；如果项目需要完整快照，可由项目的 Git 仓库管理）
 
 ---
 

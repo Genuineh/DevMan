@@ -11,28 +11,25 @@ use devman_core::{
 };
 use super::{Storage, StorageError, Result};
 use tokio::fs;
-use tracing::{debug, info};
+
 use tokio::sync::Mutex;
 
-/// Git+JSON storage backend.
+/// File-based JSON storage backend.
 ///
-/// By default this storage does not initialize or manage a Git repository; projects
-/// that wish to use Git should manage it themselves. Versioning is supported via
-/// a small per-object meta file and an `archives/` snapshot directory.
+/// This storage stores objects as JSON files under the `.devman/` directory.
+/// It maintains a small per-object meta file that records a version marker and
+/// timestamp. Full snapshot/version history is expected to be managed by the
+/// project's own Git repository; this storage will NOT manage Git or full
+/// snapshot archives.
 pub struct GitJsonStorage {
     root: std::path::PathBuf,
     pending: Arc<Mutex<bool>>,
-    enable_git: bool,
 }
 
 impl GitJsonStorage {
-    /// Create storage without managing Git (recommended: project manages Git itself).
+    /// Create storage. This will create the `.devman/` subdirectories needed for
+    /// data and meta markers. It does NOT initialize or manage a Git repository.
     pub async fn new(root: impl AsRef<Path>) -> Result<Self> {
-        Self::new_with_git(root, false).await
-    }
-
-    /// Create storage and optionally enable Git management.
-    pub async fn new_with_git(root: impl AsRef<Path>, enable_git: bool) -> Result<Self> {
         let root = root.as_ref().to_path_buf();
 
         // Ensure primary directories
@@ -45,36 +42,19 @@ impl GitJsonStorage {
         fs::create_dir_all(root.join("quality")).await?;
         fs::create_dir_all(root.join("work_records")).await?;
 
-        // Directories for meta/versioning
+        // Directories for meta/versioning (only meta markers are stored)
         fs::create_dir_all(root.join("meta").join("goals")).await?;
-        fs::create_dir_all(root.join("archives").join("goals")).await?;
         fs::create_dir_all(root.join("meta").join("projects")).await?;
-        fs::create_dir_all(root.join("archives").join("projects")).await?;
         fs::create_dir_all(root.join("meta").join("phases")).await?;
-        fs::create_dir_all(root.join("archives").join("phases")).await?;
         fs::create_dir_all(root.join("meta").join("tasks")).await?;
-        fs::create_dir_all(root.join("archives").join("tasks")).await?;
         fs::create_dir_all(root.join("meta").join("events")).await?;
-        fs::create_dir_all(root.join("archives").join("events")).await?;
         fs::create_dir_all(root.join("meta").join("knowledge")).await?;
-        fs::create_dir_all(root.join("archives").join("knowledge")).await?;
         fs::create_dir_all(root.join("meta").join("quality")).await?;
-        fs::create_dir_all(root.join("archives").join("quality")).await?;
         fs::create_dir_all(root.join("meta").join("work_records")).await?;
-        fs::create_dir_all(root.join("archives").join("work_records")).await?;
-
-        // Only initialize Git repository if requested
-        if enable_git {
-            if !root.join(".git").exists() {
-                info!("Initializing Git repository at {}", root.display());
-                git2::Repository::init(&root)?;
-            }
-        }
 
         Ok(Self {
             root,
             pending: Arc::new(Mutex::new(false)),
-            enable_git,
         })
     }
 
@@ -107,13 +87,7 @@ impl GitJsonStorage {
         self.root.join("meta").join(kind).join(format!("{}.meta.json", id))
     }
 
-    fn archive_path(&self, kind: &str, id: &str, version: u64) -> std::path::PathBuf {
-        self.root.join("archives").join(kind).join(format!("{}.{}.json", id, version))
-    }
 
-    fn open_repo(&self) -> std::result::Result<git2::Repository, git2::Error> {
-        git2::Repository::open(&self.root)
-    }
 
     async fn set_pending(&self) {
         *self.pending.lock().await = true;
@@ -145,20 +119,7 @@ impl GitJsonStorage {
         Ok(version)
     }
 
-    /// Archive a snapshot of the object under its versioned archive path.
-    async fn archive_snapshot(&self, kind: &str, id: &str, version: u64, _json: &str) -> Result<()> {
-        // Write a small meta record for the archived version instead of full snapshot.
-        // This keeps archives lightweight and avoids duplicating full object contents.
-        let path = self.archive_path(kind, id, version);
-        let object_rel = format!("{}/{}.json", kind, id);
-        let meta = serde_json::json!({
-            "version": version,
-            "object": object_rel,
-            "archived_at": chrono::Utc::now()
-        });
-        fs::write(&path, serde_json::to_string_pretty(&meta)?.as_bytes()).await?;
-        Ok(())
-    }
+
 }
 
 #[async_trait::async_trait]
@@ -168,10 +129,9 @@ impl Storage for GitJsonStorage {
         let json = serde_json::to_string_pretty(goal)?;
         fs::write(&path, json.as_bytes()).await?;
 
-        // Versioning & archiving
+        // Versioning (meta only)
         let id_str = format!("{}", goal.id);
-        let ver = self.bump_version("goals", &id_str).await?;
-        self.archive_snapshot("goals", &id_str, ver, &json).await?;
+        let _ver = self.bump_version("goals", &id_str).await?;
 
         self.set_pending().await;
         Ok(())
@@ -191,8 +151,7 @@ impl Storage for GitJsonStorage {
         fs::write(&path, json.as_bytes()).await?;
 
         let id_str = format!("{}", project.id);
-        let ver = self.bump_version("projects", &id_str).await?;
-        self.archive_snapshot("projects", &id_str, ver, &json).await?;
+        let _ver = self.bump_version("projects", &id_str).await?;
 
         self.set_pending().await;
         Ok(())
@@ -208,8 +167,7 @@ impl Storage for GitJsonStorage {
         fs::write(&path, json.as_bytes()).await?;
 
         let id_str = format!("{}", phase.id);
-        let ver = self.bump_version("phases", &id_str).await?;
-        self.archive_snapshot("phases", &id_str, ver, &json).await?;
+        let _ver = self.bump_version("phases", &id_str).await?;
 
         self.set_pending().await;
         Ok(())
@@ -225,8 +183,7 @@ impl Storage for GitJsonStorage {
         fs::write(&path, json.as_bytes()).await?;
 
         let id_str = format!("{}", task.id);
-        let ver = self.bump_version("tasks", &id_str).await?;
-        self.archive_snapshot("tasks", &id_str, ver, &json).await?;
+        let _ver = self.bump_version("tasks", &id_str).await?;
 
         self.set_pending().await;
         Ok(())
@@ -263,8 +220,7 @@ impl Storage for GitJsonStorage {
         fs::write(&path, json.as_bytes()).await?;
 
         let id_str = format!("{}", event.id);
-        let ver = self.bump_version("events", &id_str).await?;
-        self.archive_snapshot("events", &id_str, ver, &json).await?;
+        let _ver = self.bump_version("events", &id_str).await?;
 
         self.set_pending().await;
         Ok(())
@@ -286,8 +242,7 @@ impl Storage for GitJsonStorage {
         fs::write(&path, json.as_bytes()).await?;
 
         let id_str = format!("{}", knowledge.id);
-        let ver = self.bump_version("knowledge", &id_str).await?;
-        self.archive_snapshot("knowledge", &id_str, ver, &json).await?;
+        let _ver = self.bump_version("knowledge", &id_str).await?;
 
         self.set_pending().await;
         Ok(())
@@ -307,8 +262,7 @@ impl Storage for GitJsonStorage {
         fs::write(&path, json.as_bytes()).await?;
 
         let id_str = format!("{}", check.id);
-        let ver = self.bump_version("quality", &id_str).await?;
-        self.archive_snapshot("quality", &id_str, ver, &json).await?;
+        let _ver = self.bump_version("quality", &id_str).await?;
 
         self.set_pending().await;
         Ok(())
@@ -328,8 +282,7 @@ impl Storage for GitJsonStorage {
         fs::write(&path, json.as_bytes()).await?;
 
         let id_str = format!("{}", record.id);
-        let ver = self.bump_version("work_records", &id_str).await?;
-        self.archive_snapshot("work_records", &id_str, ver, &json).await?;
+        let _ver = self.bump_version("work_records", &id_str).await?;
 
         self.set_pending().await;
         Ok(())
@@ -346,64 +299,20 @@ impl Storage for GitJsonStorage {
             .collect())
     }
 
-    async fn commit(&mut self, message: &str) -> Result<()> {
-        if !self.enable_git {
-            // When Git integration is disabled, just clear pending state (no repo ops).
-            *self.pending.lock().await = false;
-            return Ok(());
-        }
-
-        if self.is_pending().await {
-            self.do_commit_sync(message)?;
-        }
+    async fn commit(&mut self, _message: &str) -> Result<()> {
+        // No Git management by default; commit is a no-op that clears pending state.
+        *self.pending.lock().await = false;
         Ok(())
     }
 
     async fn rollback(&mut self) -> Result<()> {
-        if !self.enable_git {
-            *self.pending.lock().await = false;
-            return Ok(());
-        }
-
-        let _ = self.open_repo()
-            .and_then(|repo| {
-                repo.head()
-                    .and_then(|h| h.peel_to_commit())
-                    .and_then(|commit| {
-                        repo.reset(commit.as_object(), git2::ResetType::Hard, None)
-                    })
-            });
+        // No Git integration; rollback simply clears pending state.
         *self.pending.lock().await = false;
         Ok(())
     }
 }
 
-impl GitJsonStorage {
-    fn do_commit_sync(&self, message: &str) -> Result<()> {
-        let repo = self.open_repo()?;
-        let mut index = repo.index()?;
-        index.add_all(["*"], git2::IndexAddOption::DEFAULT, None)?;
-        index.write()?;
-        let tree_id = index.write_tree()?;
-        let tree = repo.find_tree(tree_id)?;
-        let sig = repo.signature()?;
-        let parent = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
 
-        if let Some(parent) = &parent {
-            repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &[parent])?;
-        } else {
-            repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &[])?;
-        }
-
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                *self.pending.lock().await = false;
-            });
-        });
-        debug!("Committed: {}", message);
-        Ok(())
-    }
-}
 
 async fn read_json<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Result<Option<T>> {
     match fs::read_to_string(path).await {
