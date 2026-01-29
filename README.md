@@ -84,6 +84,18 @@ devman-ai --help         # MCP server（如果已安装）
   - `cargo run -p devman-cli -- ShowGoal <goal-id>`
 
 > 注：CLI 使用 `GitJsonStorage`（默认目录 `.devman/`）保存数据。
+>
+> **变更说明**：默认情况下，`GitJsonStorage` **不会** 自动初始化或管理仓库（项目应自行管理 Git），存储目录将包含版本元数据和归档快照：
+> - 元数据：`.devman/meta/`（记录每个对象的版本号）
+> - 归档： `.devman/archives/`（按版本保存对象快照）
+>
+> 如果希望由存储自动管理 Git，可以在代码中使用：
+>
+> ```rust
+> // 启用 Git 管理（慎用：启动时会在目录下初始化 .git）
+> let mut storage = GitJsonStorage::new_with_git(&storage_path, true).await?;
+> ```
+
 
 ### 运行 MCP Server（占位）
 
