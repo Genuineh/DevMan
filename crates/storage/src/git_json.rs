@@ -146,9 +146,17 @@ impl GitJsonStorage {
     }
 
     /// Archive a snapshot of the object under its versioned archive path.
-    async fn archive_snapshot(&self, kind: &str, id: &str, version: u64, json: &str) -> Result<()> {
+    async fn archive_snapshot(&self, kind: &str, id: &str, version: u64, _json: &str) -> Result<()> {
+        // Write a small meta record for the archived version instead of full snapshot.
+        // This keeps archives lightweight and avoids duplicating full object contents.
         let path = self.archive_path(kind, id, version);
-        fs::write(&path, json).await?;
+        let object_rel = format!("{}/{}.json", kind, id);
+        let meta = serde_json::json!({
+            "version": version,
+            "object": object_rel,
+            "archived_at": chrono::Utc::now()
+        });
+        fs::write(&path, serde_json::to_string_pretty(&meta)?.as_bytes()).await?;
         Ok(())
     }
 }

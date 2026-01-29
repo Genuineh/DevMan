@@ -85,14 +85,15 @@ devman-ai --help         # MCP server（如果已安装）
 
 > 注：CLI 使用 `GitJsonStorage`（默认目录 `.devman/`）保存数据。
 >
-> **变更说明**：默认情况下，`GitJsonStorage` **不会** 自动初始化或管理仓库（项目应自行管理 Git），存储目录将包含版本元数据和归档快照：
-> - 元数据：`.devman/meta/`（记录每个对象的版本号）
-> - 归档： `.devman/archives/`（按版本保存对象快照）
+> **变更说明**：默认情况下，`GitJsonStorage` **不会** 自动初始化或管理仓库；存储为基于文件的 JSON 存储，项目通过在仓库根目录下创建 `.devman/` 文件夹来管理本地数据。
 >
-> 如果希望由存储自动管理 Git，可以在代码中使用：
+> - 元数据：`.devman/meta/`（每个对象的版本标记，仅保存 `meta.json` 信息，包含版本号与时间戳）
+> - 归档：`.devman/archives/`（按版本保存元信息记录，**不保存对象全量**，仅指向对象文件路径）
+>
+> 如果希望由存储自动管理 Git（在极少数场景需要），可以在代码中显式启用：
 >
 > ```rust
-> // 启用 Git 管理（慎用：启动时会在目录下初始化 .git）
+> // 启用 Git 管理（慎用：会在目录下初始化 .git）
 > let mut storage = GitJsonStorage::new_with_git(&storage_path, true).await?;
 > ```
 
