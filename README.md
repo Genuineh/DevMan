@@ -35,20 +35,45 @@ DevMan 是一个面向 AI 的工作管理与质量保证基础设施，目标是
 
 ## 快速上手 🚀
 
-### 构建
+### 构建与本地安装
 
-在仓库根目录运行：
+在仓库根目录构建：
 
 ```bash
-# 构建所有 crate
+# 构建所有 crate（开发）
 cargo build --workspace
 
-# 或运行 CLI（示例）
+# 运行 CLI（来自源码）
 cargo run -p devman-cli -- CreateGoal "My goal" "描述"
-cargo run -p devman-cli -- ListGoals
-cargo run -p devman-cli -- ShowGoal <goal-id>
 ```
 
+本地安装（将可执行文件安装到 `~/.cargo/bin`，便于全局使用）：
+
+```bash
+# 安装 CLI
+cargo install --path crates/cli --force
+# 安装 MCP server（二进制名：devman-ai）
+cargo install --path crates/ai --force
+```
+
+或者使用 release 构建并手动拷贝二进制：
+
+```bash
+cargo build -p devman-cli --release
+cp target/release/devman ~/.local/bin/
+
+cargo build -p devman-ai --release
+cp target/release/devman-ai ~/.local/bin/
+```
+
+验证安装：
+
+```bash
+devman --help            # CLI
+devman-ai --help         # MCP server（如果已安装）
+```
+
+> 注：如果未安装到 PATH，请将 `~/.cargo/bin` 或 `~/.local/bin` 添加到 `PATH`。
 ### 使用 `devman-cli` 示例
 
 - 创建目标
