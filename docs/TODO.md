@@ -1,329 +1,364 @@
-# DevMan 开发规划
+# DevMan 开发规划 v2
 
-> AI 的执行认知框架 - 长期计划系统
+> AI 的认知工作管理系统 - 外部大脑 + 项目经理 + 质检员
 
 ## 项目定位
 
-DevMan 不是任务管理器，而是 **AI 的执行认知框架**。
-
 ```
-Goal → Plan → Action → Observation → Reflection → Goal Update
-```
+不是：AI 执行任务的平台
+而是：AI 的外部认知和工程管理基础设施
 
-闭环，支持：
-- 长期目标追踪
-- 假设驱动的探索
-- 自动反思与学习
-- 自进化能力
+核心价值：
+├── 认知存储与复用（减少重复思考）
+├── 进度可视化（工作透明化）
+├── 质量保证（自动化 + 人工质检）
+├── Token 优化（工具化稳定操作）
+└── 可追溯性（完整工作日志）
+```
 
 ---
 
-## 核心架构（四层模型）
+## 核心架构（五层模型）
 
 ```
-Layer 4: Evolution Layer     ← 自我改进
-Layer 3: Reflection Layer    ← 复盘与学习
-Layer 2: Execution Layer     ← 执行与调度
-Layer 1: Memory Layer        ← 长期记忆
+Layer 5: Knowledge Service    (知识检索与复用)
+Layer 4: Quality Assurance     (质量检验)
+Layer 3: Progress Tracking     (进度管理)
+Layer 2: Work Management       (工作执行)
+Layer 1: Storage & State       (存储与状态)
 ```
 
 ---
 
 ## 开发路线图
 
-### 阶段 0：项目初始化
-- [ ] 初始化 Rust 项目 (`cargo init`)
-- [ ] 创建 workspace 结构
-- [ ] 配置基础依赖 (tokio, serde, clap)
-- [ ] 设置 pre-commit hooks
+### Phase 1：核心数据模型重构
+- [x] 项目初始化
+- [ ] 重构核心数据结构
+  - [ ] `Goal` - 顶层目标，带成功标准和进度
+  - [ ] `Project` - 工程上下文和配置
+  - [ ] `Phase` - 阶段划分和验收标准
+  - [ ] `Task` - 保留并增强（添加质量门、执行步骤）
+  - [ ] `WorkRecord` - 详细工作日志
+  - [ ] `Knowledge` - 多类型知识资产
+  - [ ] `QualityCheck` - 通用 + 业务质检
 
-### 阶段 1：核心数据模型 (Layer 1)
-- [ ] 定义核心数据结构
-  - [ ] `Task` - 任务实体
-  - [ ] `Event` - 时间线原子
-  - [ ] `KnowledgeNode` - 认知图谱节点
-  - [ ] `TaskLink` - 任务关联关系
-- [ ] 实现状态机
-  - [ ] IDEA → QUEUED → ACTIVE → REVIEW → DONE
-  - [ ] ACTIVE → BLOCKED → ABANDONED 分支
-- [ ] 序列化/反序列化 (serde)
+### Phase 2：存储层
+- [ ] 扩展 `Storage` trait（支持新模型）
+- [ ] 更新 `GitJsonStorage` 实现
+- [ ] 事务支持
+- [ ] 查询接口优化
 
-### 阶段 2：存储抽象层
-- [ ] 定义 `Storage` trait
-  ```rust
-  trait Storage {
-      fn save_task(&mut self, task: &Task) -> Result<()>;
-      fn load_task(&self, id: TaskId) -> Result<Option<Task>>;
-      fn list_tasks(&self, filter: TaskFilter) -> Result<Vec<Task>>;
-      fn save_event(&mut self, event: &Event) -> Result<()>;
-      // ...
-  }
-  ```
-- [ ] 实现 `GitJsonStorage`
-  - [ ] JSON 文件存储
-  - [ ] Git commit 每次变更
-  - [ ] 自动生成时间线
-- [ ] 为未来 SQLite/GraphDB 预留接口
+### Phase 3：质量保证（核心）
+- [ ] `QualityEngine` trait
+- [ ] 通用质检实现
+  - [ ] 编译检查
+  - [ ] 测试检查
+  - [ ] 格式检查
+  - [ ] Lint 检查
+  - [ ] 文档检查
+- [ ] 业务质检扩展机制
+  - [ ] `CustomCheckSpec` 设计
+  - [ ] 命令执行
+  - [ ] 输出解析
+- [ ] 人机协作接口
+  - [ ] `HumanReviewSpec`
+  - [ ] 通知机制
+  - [ ] 评审表单
+- [ ] 质检编排
+  - [ ] `QualityProfile`
+  - [ ] `QualityGate`
+  - [ ] 策略配置
 
-### 阶段 3：执行循环 (Layer 2)
-- [ ] 实现 Task Selector
-  - [ ] 可插拔选择策略
-  - [ ] 默认：优先级 + 依赖解析
-- [ ] 实现 Dependency Resolver
-  - [ ] 依赖图构建
-  - [ ] 循环依赖检测
-  - [ ] 探索模式（允许绕过依赖）
-- [ ] 实现 Resource Scheduler
-  - [ ] 时间/计算预算控制
-  - [ ] 并发任务管理
-- [ ] 核心执行循环
-  ```rust
-  loop {
-      task = select_task();
-      result = execute(task);
-      reflection = analyze(result);
-      update_memory(reflection);
-  }
-  ```
+### Phase 4：知识服务
+- [ ] `KnowledgeService` trait
+- [ ] 知识检索
+  - [ ] 标签检索
+  - [ ] 相似度匹配
+  - [ ] 上下文推荐
+- [ ] 知识模板
+  - [ ] 参数化模板
+  - [ ] 模板实例化
+- [ ] 知识分类
+  - [ ] 经验教训
+  - [ ] 最佳实践
+  - [ ] 代码模式
+  - [ ] 解决方案
 
-### 阶段 4：反思系统 (Layer 3)
-- [ ] 实现 Reflection Engine
-  - [ ] Expected vs Actual 对比
-  - [ ] 假设验证逻辑
-  - [ ] 错误分类
-- [ ] 知识更新机制
-  - [ ] 置信度调整
-  - [ ] 新知识节点生成
-- [ ] 自增长任务树
-  - [ ] 根据反思自动生成新任务
-  - [ ] 任务拆分与合并
+### Phase 5：进度追踪
+- [ ] `ProgressTracker` trait
+- [ ] 目标进度计算
+- [ ] 阶段里程碑追踪
+- [ ] 阻塞检测
+- [ ] 完成时间预估
 
-### 阶段 5：对外接口
-- [ ] CLI 实现
-  - [ ] `devman add` - 添加任务
-  - [ ] `devman list` - 列出任务
-  - [ ] `devman run` - 执行一步
-  - [ ] `devman reflect` - 触发反思
-  - [ ] `devman status` - 查看状态
+### Phase 6：工作管理
+- [ ] `WorkManager` trait
+- [ ] 任务创建和执行
+- [ ] 上下文管理
+- [ ] 事件记录
+- [ ] 工作记录生成
+
+### Phase 7：工具集成
+- [ ] `Tool` trait
+- [ ] 内置工具
+  - [ ] Cargo
+  - [ ] Npm
+  - [ ] Git
+  - [ ] 文件系统
+- [ ] 工作流编排
+- [ ] 错误处理策略
+
+### Phase 8：AI 接口
+- [ ] `AIInterface` trait
+- [ ] 高层 API 设计
 - [ ] MCP Server 实现
-  - [ ] MCP 协议适配
-  - [ ] 工具注册 (add_task, execute, reflect, etc.)
-  - [ ] Claude Code 集成测试
-
-### 阶段 6：进化层 (Layer 4)
-- [ ] 元数据收集
-  - [ ] 任务失败率统计
-  - [ ] 策略效率追踪
-- [ ] 自适应调优
-  - [ ] 优先级权重学习
-  - [ ] 探索比例调整
-- [ ] 目标进化机制
-  - [ ] 目标升级/分裂/放弃
-
-### 阶段 7：高级特性
-- [ ] 多 Agent 协同
-  - [ ] Planner / Executor / Critic / Archivist 角色
-- [ ] 认知图可视化
-- [ ] 时间线回溯
-- [ ] 实验管理
+- [ ] CLI 更新
 
 ---
 
-## Crate 结构
+## Crate 结构（重构后）
 
 ```
 devman/
-├── Cargo.toml                    # workspace root
+├── Cargo.toml
 ├── crates/
-│   ├── core/                     # 核心数据模型
-│   │   ├── src/
-│   │   │   ├── task.rs
-│   │   │   ├── event.rs
-│   │   │   ├── knowledge.rs
-│   │   │   └── lib.rs
-│   │   └── Cargo.toml
-│   ├── storage/                  # 存储抽象与实现
-│   │   ├── src/
-│   │   │   ├── trait.rs
-│   │   │   ├── git_json.rs
-│   │   │   └── lib.rs
-│   │   └── Cargo.toml
-│   ├── execution/                # 执行调度
-│   │   ├── src/
-│   │   │   ├── selector.rs
-│   │   │   ├── dependency.rs
-│   │   │   ├── scheduler.rs
-│   │   │   └── lib.rs
-│   │   └── Cargo.toml
-│   ├── reflection/               # 反思系统
-│   │   ├── src/
-│   │   │   ├── engine.rs
-│   │   │   ├── analyzer.rs
-│   │   │   └── lib.rs
-│   │   └── Cargo.toml
-│   ├── evolution/                # 进化层
-│   │   ├── src/
-│   │   │   ├── optimizer.rs
-│   │   │   └── lib.rs
-│   │   └── Cargo.toml
-│   ├── cli/                      # 命令行
-│   │   ├── src/
-│   │   │   └── main.rs
-│   │   └── Cargo.toml
-│   └── mcp/                      # MCP Server
-│       ├── src/
-│       │   └── main.rs
-│       └── Cargo.toml
+│   ├── core/                    # 核心数据模型
+│   │   ├── goal.rs
+│   │   ├── project.rs
+│   │   ├── phase.rs
+│   │   ├── task.rs
+│   │   ├── work_record.rs
+│   │   ├── knowledge.rs
+│   │   ├── quality.rs
+│   │   └── lib.rs
+│   │
+│   ├── storage/                 # 存储层
+│   │   ├── trait.rs
+│   │   ├── git_json.rs
+│   │   └── lib.rs
+│   │
+│   ├── knowledge/               # 知识服务 (Layer 5)
+│   │   ├── service.rs
+│   │   ├── search.rs
+│   │   ├── template.rs
+│   │   └── lib.rs
+│   │
+│   ├── quality/                 # 质量保证 (Layer 4)
+│   │   ├── engine.rs
+│   │   ├── checks.rs          # 通用质检
+│   │   ├── custom.rs          # 业务质检扩展
+│   │   ├── registry.rs
+│   │   ├── human_review.rs
+│   │   └── lib.rs
+│   │
+│   ├── progress/                # 进度追踪 (Layer 3)
+│   │   ├── tracker.rs
+│   │   ├── estimator.rs
+│   │   ├── blocker.rs
+│   │   └── lib.rs
+│   │
+│   ├── work/                    # 工作管理 (Layer 2)
+│   │   ├── manager.rs
+│   │   ├── executor.rs
+│   │   ├── context.rs
+│   │   └── lib.rs
+│   │
+│   ├── tools/                   # 工具集成
+│   │   ├── trait.rs
+│   │   ├── builtin.rs
+│   │   └── lib.rs
+│   │
+│   ├── ai/                      # AI 接口
+│   │   ├── interface.rs
+│   │   └── mcp_server.rs
+│   │
+│   └── cli/                     # 命令行
+│       └── main.rs
+│
 └── docs/
-    └── TODO.md                   # 本文档
+    ├── DESIGN.md
+    ├── TODO.md
+    ├── API.md
+    └── QUALITY_GUIDE.md
 ```
 
 ---
 
-## 核心数据模型
+## 核心数据模型概要
 
-### Task
+### Goal（目标）
 ```rust
-struct Task {
-    id: TaskId,
-    intent: String,              // 为什么存在
-    hypothesis: String,          // 预期改变
-    status: TaskStatus,
-    confidence: f32,             // 0-1
-    priority: u8,                // 0-255
-    links: Vec<TaskLink>,        // 依赖/阻塞/相关
-    logs: Vec<EventId>,          // 关联事件
-    created_at: Time,
-    updated_at: Time,
-}
-
-enum TaskStatus {
-    Idea,
-    Queued,
-    Active,
-    Blocked,
-    Review,
-    Done,
-    Abandoned,
-}
-
-struct TaskLink {
-    to: TaskId,
-    kind: LinkKind,  // DependsOn, Blocks, RelatedTo, DerivesFrom
+struct Goal {
+    id: GoalId,
+    title: String,
+    success_criteria: Vec<SuccessCriterion>,
+    progress: GoalProgress,
+    current_phase: PhaseId,
+    status: GoalStatus,
 }
 ```
 
-### Event
+### Project（项目）
 ```rust
-struct Event {
-    id: EventId,
-    timestamp: Time,
-    actor: AgentId,
-    action: String,
-    result: String,
-    delta_knowledge: Vec<KnowledgeUpdate>,
-    related_tasks: Vec<TaskId>,
+struct Project {
+    id: ProjectId,
+    name: String,
+    config: ProjectConfig,  // 技术栈、目录结构、质检配置
+    phases: Vec<Phase>,
+    current_phase: PhaseId,
 }
 ```
 
-### KnowledgeNode
+### QualityCheck（质检）
 ```rust
-struct KnowledgeNode {
-    id: NodeId,
-    claim: String,
-    confidence: f32,
-    derived_from: Vec<NodeId>,
-    evidence: Vec<EventId>,
-    created_at: Time,
+enum QualityCheckType {
+    Generic(GenericCheckType),  // 通用（编译、测试...）
+    Custom(CustomCheckSpec),    // 业务（用户扩展）
+}
+
+struct HumanReviewSpec {        // 人机协作
+    reviewers: Vec<String>,
+    review_guide: String,
+    review_form: Vec<ReviewQuestion>,
 }
 ```
 
-### ReflectionReport
+### Knowledge（知识）
 ```rust
-struct ReflectionReport {
-    task_id: TaskId,
-    success: bool,
-    insight: String,
-    confidence_delta: f32,
-    derived_tasks: Vec<Task>,
-    knowledge_updates: Vec<KnowledgeNode>,
-    generated_at: Time,
+enum KnowledgeType {
+    LessonLearned,
+    BestPractice,
+    CodePattern,
+    Solution,
+    Template,
+    Decision,
 }
 ```
 
 ---
 
-## 依赖选择
+## 质检扩展机制
 
-```toml
-[workspace.dependencies]
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "1"
-tracing = "0.1"
-tracing-subscriber = "0.3"
-clap = { version = "4", features = ["derive"] }
-git2 = "0.18"
-chrono = { version = "0.4", features = ["serde"] }
-ulid = "1"
+### 通用质检（内置）
+- 编译检查
+- 测试检查（支持覆盖率）
+- 格式检查
+- Lint 检查
+- 文档检查
+- 类型检查
+- 安全扫描
+
+### 业务质检（用户扩展）
+```rust
+struct CustomCheckSpec {
+    name: String,
+    check_command: CommandSpec,
+    validation: ValidationSpec,
+    human_review: Option<HumanReviewSpec>,
+}
+```
+
+### 人机协作流程
+```
+1. 系统运行自动质检
+2. 发现需要人工判断的问题
+3. 发送通知（Slack/Email/Webhook）
+4. 业务人员评审（填写表单）
+5. 系统记录结果，更新知识
 ```
 
 ---
 
-## 开发优先级
+## AI 使用流程
 
-### P0 - 第一版可运行 (MVP)
-1. 核心数据模型
-2. Git+JSON 存储
-3. 基础执行循环
-4. CLI 基本命令
+### 场景：AI 开始新项目
+```
+1. AI: "创建一个 Rust Web 框架"
+2. 系统：创建 Goal + Project + Phase
+3. 系统：初始化 QualityProfile
+4. 系统：返回 WorkContext
+```
 
-### P1 - 完整功能
-1. 反思系统
-2. MCP Server
-3. 依赖解析
-4. 任务选择策略
-
-### P2 - 高级特性
-1. 进化层
-2. 多 Agent
-3. 可视化
+### 场景：AI 执行任务
+```
+1. AI: "实现 HTTP 路由"
+2. 系统：查询知识库，返回最佳实践
+3. AI：创建 Task，定义 ExecutionStep
+4. 系统：执行工具（cargo, git 等）
+5. 系统：自动运行质检
+6. 系统：记录 WorkRecord
+```
 
 ---
 
-## 设计原则
+## 优先级（按依赖顺序）
 
-1. **存储抽象** - 所有存储操作通过 trait，可替换
-2. **策略可插拔** - 任务选择、反思策略都是可替换的
-3. **不可变优先** - Event 日志不可变，状态通过重放计算
-4. **Git 友好** - 所有数据可读、可 merge
-5. **AI 友好** - 结构化输出，易于解析
+### P0 - 基础结构
+1. 核心数据模型（Goal, Project, Phase, Task, WorkRecord）
+2. 存储层更新
+3. CLI 基础命令
+
+### P1 - 质量保证
+1. QualityEngine
+2. 通用质检实现
+3. 业务质检扩展机制
+4. 质检编排
+
+### P2 - 知识服务
+1. 知识存储和检索
+2. 模板系统
+3. 相似度匹配
+
+### P3 - 进度与工作管理
+1. ProgressTracker
+2. WorkManager
+3. 上下文管理
+
+### P4 - 工具与 AI 接口
+1. Tool trait
+2. 内置工具
+3. AIInterface
+4. MCP Server
+
+---
+
+## 设计原则（更新）
+
+1. **质检可扩展** - 通用 + 业务 + 人机协作
+2. **知识可复用** - 检索、模板、推荐
+3. **工具化执行** - 减少_token_消耗
+4. **进度可视化** - 目标 → 阶段 → 任务
+5. **存储抽象** - 可替换存储后端
+6. **AI 友好** - 结构化接口
+7. **可追溯性** - 完整工作日志
 
 ---
 
 ## 文档计划
 
-- [ ] ARCHITECTURE.md - 整体架构说明
-- [ ] DATA_MODEL.md - 数据模型详解
-- [ ] STORAGE.md - 存储层设计
-- [ ] REFLECTION.md - 反思机制
-- [ ] MCP_INTEGRATION.md - MCP 集成指南
+- [x] DESIGN.md - 完整设计方案
+- [ ] API.md - API 参考
+- [ ] QUALITY_GUIDE.md - 质检扩展指南
+- [ ] KNOWLEDGE.md - 知识管理指南
+- [ ] ARCHITECTURE.md - 架构详解
 - [ ] CONTRIBUTING.md - 贡献指南
 
 ---
 
 ## 当前进度
 
-- [x] 项目规格定义
-- [ ] Rust 项目初始化
-- [ ] 核心数据模型实现
-- [ ] 存储层实现
-- [ ] 执行循环实现
-- [ ] CLI 完成
-- [ ] MCP Server 完成
-- [ ] 反思系统实现
-- [ ] 进化层实现
+- [x] 项目规格定义（v1）
+- [x] 设计方案 v2
+- [x] Rust 项目初始化
+- [ ] 核心数据模型重构
+- [ ] 存储层更新
+- [ ] 质量保证实现
+- [ ] 知识服务实现
+- [ ] 进度追踪实现
+- [ ] 工作管理实现
+- [ ] 工具集成实现
+- [ ] AI 接口实现
 
 ---
 

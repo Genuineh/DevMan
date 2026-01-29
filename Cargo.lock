@@ -196,15 +196,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
+name = "devman-ai"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "devman-core",
+ "devman-knowledge",
+ "devman-progress",
+ "devman-quality",
+ "devman-storage",
+ "devman-tools",
+ "devman-work",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "devman-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
+ "chrono",
  "clap",
+ "devman-ai",
  "devman-core",
- "devman-execution",
- "devman-reflection",
+ "devman-knowledge",
+ "devman-progress",
+ "devman-quality",
  "devman-storage",
+ "devman-tools",
+ "devman-work",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -223,48 +249,34 @@ dependencies = [
 ]
 
 [[package]]
-name = "devman-evolution"
+name = "devman-knowledge"
 version = "0.1.0"
 dependencies = [
- "devman-core",
- "devman-storage",
- "serde",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "devman-execution"
-version = "0.1.0"
-dependencies = [
- "anyhow",
  "async-trait",
  "devman-core",
  "devman-storage",
+ "serde",
  "thiserror",
  "tokio",
  "tracing",
 ]
 
 [[package]]
-name = "devman-mcp"
+name = "devman-progress"
 version = "0.1.0"
 dependencies = [
- "anyhow",
+ "async-trait",
+ "chrono",
  "devman-core",
- "devman-execution",
- "devman-reflection",
  "devman-storage",
  "serde",
- "serde_json",
+ "thiserror",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
-name = "devman-reflection"
+name = "devman-quality"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -272,6 +284,9 @@ dependencies = [
  "chrono",
  "devman-core",
  "devman-storage",
+ "devman-tools",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",
@@ -287,6 +302,37 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "devman-tools"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "devman-work"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "devman-core",
+ "devman-progress",
+ "devman-quality",
+ "devman-storage",
+ "devman-tools",
+ "serde",
  "thiserror",
  "tokio",
  "tracing",

@@ -1,7 +1,11 @@
 //! Storage trait abstraction.
 
 use async_trait::async_trait;
-use devman_core::{Event, KnowledgeNode, Task, TaskFilter, TaskId, EventId, NodeId};
+use devman_core::{
+    Goal, GoalId, Project, ProjectId, Phase, PhaseId, Task, TaskId, TaskFilter,
+    Event, EventId, Knowledge, KnowledgeId, QualityCheck, QualityCheckId,
+    WorkRecord, WorkRecordId, Blocker, BlockerId,
+};
 
 /// Error type for storage operations.
 pub type Result<T> = std::result::Result<T, StorageError>;
@@ -35,15 +39,42 @@ pub enum StorageError {
 /// This trait allows different storage backends to be plugged in.
 #[async_trait]
 pub trait Storage: Send + Sync {
+    // === Goal operations ===
+
+    /// Save a goal.
+    async fn save_goal(&mut self, goal: &Goal) -> Result<()>;
+
+    /// Load a goal by ID.
+    async fn load_goal(&self, id: GoalId) -> Result<Option<Goal>>;
+
+    /// List all goals.
+    async fn list_goals(&self) -> Result<Vec<Goal>>;
+
+    // === Project operations ===
+
+    /// Save a project.
+    async fn save_project(&mut self, project: &Project) -> Result<()>;
+
+    /// Load a project by ID.
+    async fn load_project(&self, id: ProjectId) -> Result<Option<Project>>;
+
+    // === Phase operations ===
+
+    /// Save a phase.
+    async fn save_phase(&mut self, phase: &Phase) -> Result<()>;
+
+    /// Load a phase by ID.
+    async fn load_phase(&self, id: PhaseId) -> Result<Option<Phase>>;
+
     // === Task operations ===
 
-    /// Save a task (create or update).
+    /// Save a task.
     async fn save_task(&mut self, task: &Task) -> Result<()>;
 
     /// Load a task by ID.
     async fn load_task(&self, id: TaskId) -> Result<Option<Task>>;
 
-    /// List tasks matching the filter.
+    /// List tasks with optional filter.
     async fn list_tasks(&self, filter: &TaskFilter) -> Result<Vec<Task>>;
 
     /// Delete a task.
@@ -62,14 +93,36 @@ pub trait Storage: Send + Sync {
 
     // === Knowledge operations ===
 
-    /// Save a knowledge node.
-    async fn save_knowledge(&mut self, node: &KnowledgeNode) -> Result<()>;
+    /// Save knowledge.
+    async fn save_knowledge(&mut self, knowledge: &Knowledge) -> Result<()>;
 
-    /// Load a knowledge node by ID.
-    async fn load_knowledge(&self, id: NodeId) -> Result<Option<KnowledgeNode>>;
+    /// Load knowledge by ID.
+    async fn load_knowledge(&self, id: KnowledgeId) -> Result<Option<Knowledge>>;
 
-    /// List all knowledge nodes.
-    async fn list_knowledge(&self) -> Result<Vec<KnowledgeNode>>;
+    /// List all knowledge.
+    async fn list_knowledge(&self) -> Result<Vec<Knowledge>>;
+
+    // === Quality Check operations ===
+
+    /// Save a quality check.
+    async fn save_quality_check(&mut self, check: &QualityCheck) -> Result<()>;
+
+    /// Load a quality check by ID.
+    async fn load_quality_check(&self, id: QualityCheckId) -> Result<Option<QualityCheck>>;
+
+    /// List all quality checks.
+    async fn list_quality_checks(&self) -> Result<Vec<QualityCheck>>;
+
+    // === Work Record operations ===
+
+    /// Save a work record.
+    async fn save_work_record(&mut self, record: &WorkRecord) -> Result<()>;
+
+    /// Load a work record by ID.
+    async fn load_work_record(&self, id: WorkRecordId) -> Result<Option<WorkRecord>>;
+
+    /// List work records for a task.
+    async fn list_work_records(&self, task_id: TaskId) -> Result<Vec<WorkRecord>>;
 
     // === Transaction support ===
 
@@ -78,4 +131,10 @@ pub trait Storage: Send + Sync {
 
     /// Rollback pending changes.
     async fn rollback(&mut self) -> Result<()>;
+}
+
+/// A transaction for atomic operations.
+pub struct Transaction {
+    // Placeholder for transaction support
+    _private: (),
 }

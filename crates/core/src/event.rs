@@ -1,6 +1,7 @@
 //! Event model - atoms of the timeline.
 
-use crate::{EventId, TaskId, Time};
+use crate::id::{EventId, TaskId};
+use crate::Time;
 use serde::{Deserialize, Serialize};
 
 /// An event is an atomic unit that happened at a specific time.

@@ -1,68 +1,181 @@
-//! Knowledge model - cognitive graph nodes.
+//! Knowledge model - reusable cognitive assets.
 
-use crate::{EventId, NodeId, Time};
 use serde::{Deserialize, Serialize};
+use crate::id::{KnowledgeId, WorkRecordId};
+use crate::Time;
 
-/// A node in the knowledge graph representing a claim with confidence.
+/// Knowledge is a reusable cognitive asset.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KnowledgeNode {
+pub struct Knowledge {
     /// Unique identifier
-    pub id: NodeId,
+    pub id: KnowledgeId,
 
-    /// The claim or fact
-    pub claim: String,
+    /// Title
+    pub title: String,
 
-    /// Confidence level (0-1)
-    pub confidence: f32,
+    /// Knowledge type
+    pub knowledge_type: KnowledgeType,
 
-    /// What this was derived from
-    pub derived_from: Vec<NodeId>,
+    /// Content
+    pub content: KnowledgeContent,
 
-    /// Supporting evidence
-    pub evidence: Vec<EventId>,
+    /// Metadata
+    pub metadata: KnowledgeMetadata,
 
-    /// When created
+    /// Tags
+    pub tags: Vec<String>,
+
+    /// Related knowledge
+    pub related_to: Vec<KnowledgeId>,
+
+    /// Derived from work records
+    pub derived_from: Vec<WorkRecordId>,
+
+    /// Usage statistics
+    pub usage_stats: UsageStats,
+
+    /// Created at
     pub created_at: Time,
+
+    /// Updated at
+    pub updated_at: Time,
 }
 
-impl KnowledgeNode {
-    /// Create a new knowledge node.
-    pub fn new(claim: impl Into<String>) -> Self {
-        let now = chrono::Utc::now();
-        Self {
-            id: NodeId::new(),
-            claim: claim.into(),
-            confidence: 0.5,
-            derived_from: Vec::new(),
-            evidence: Vec::new(),
-            created_at: now,
-        }
-    }
-
-    /// Create a fact with high confidence.
-    pub fn fact(claim: impl Into<String>) -> Self {
-        let mut node = Self::new(claim);
-        node.confidence = 0.95;
-        node
-    }
-
-    /// Create a hypothesis with low confidence.
-    pub fn hypothesis(claim: impl Into<String>) -> Self {
-        let mut node = Self::new(claim);
-        node.confidence = 0.3;
-        node
-    }
+/// Types of knowledge.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum KnowledgeType {
+    LessonLearned { lesson: String, context: String },
+    BestPractice { practice: String, rationale: String },
+    CodePattern { pattern: CodeSnippet, usage: String },
+    Solution { problem: String, solution: String, verified: bool },
+    Template { template: TemplateContent, 适用场景: Vec<String> },
+    Decision { decision: String, alternatives: Vec<String>, reasoning: String },
 }
 
-/// An update to knowledge (delta).
+/// Knowledge content.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KnowledgeUpdate {
-    /// The claim to add/update
-    pub claim: String,
+pub struct KnowledgeContent {
+    /// Summary
+    pub summary: String,
 
-    /// Confidence adjustment (positive or negative delta)
-    pub confidence_delta: f32,
+    /// Detail
+    pub detail: String,
 
-    /// Source event
-    pub evidence: EventId,
+    /// Code examples
+    pub examples: Vec<CodeSnippet>,
+
+    /// Reference links
+    pub references: Vec<String>,
 }
+
+/// Code snippet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeSnippet {
+    /// Language
+    pub language: String,
+
+    /// Code
+    pub code: String,
+
+    /// Description
+    pub description: String,
+}
+
+// Implement PartialEq and Eq for CodeSnippet and TemplateContent
+impl PartialEq for CodeSnippet {
+    fn eq(&self, other: &Self) -> bool {
+        self.language == other.language && self.code == other.code
+    }
+}
+
+impl Eq for CodeSnippet {}
+
+/// Template content.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateContent {
+    /// Template text
+    pub template: String,
+
+    /// Parameters
+    pub parameters: Vec<TemplateParameter>,
+}
+
+impl PartialEq for TemplateContent {
+    fn eq(&self, other: &Self) -> bool {
+        self.template == other.template
+    }
+}
+
+impl Eq for TemplateContent {}
+
+/// Template parameter.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateParameter {
+    /// Parameter name
+    pub name: String,
+
+    /// Description
+    pub description: String,
+
+    /// Default value
+    pub default_value: Option<String>,
+
+    /// Required
+    pub required: bool,
+}
+
+/// Knowledge metadata.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeMetadata {
+    /// Domains/areas
+    pub domain: Vec<String>,
+
+    /// Tech stack
+    pub tech_stack: Vec<String>,
+
+    /// Applicable scenarios
+    pub scenarios: Vec<String>,
+
+    /// Quality score
+    pub quality_score: f32,
+
+    /// Verified
+    pub verified: bool,
+}
+
+/// Usage statistics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageStats {
+    /// Times used
+    pub times_used: usize,
+
+    /// Last used
+    pub last_used: Option<Time>,
+
+    /// Success rate
+    pub success_rate: f32,
+
+    /// Feedback
+    pub feedback: Vec<Feedback>,
+}
+
+/// User feedback on knowledge.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Feedback {
+    /// Rating (1-5)
+    pub rating: i32,
+
+    /// Comment
+    pub comment: String,
+
+    /// When
+    pub at: Time,
+
+    /// From
+    pub from: String,
+}
+
+// Export type aliases for compatibility
+pub type NodeId = KnowledgeId;
+pub type KnowledgeUpdate = ();

@@ -8,5 +8,5 @@
 pub mod trait_;
 pub mod git_json;
 
-pub use trait_::{Storage, StorageError, Result};
+pub use trait_::{Storage, StorageError, Result, Transaction};
 pub use git_json::GitJsonStorage;

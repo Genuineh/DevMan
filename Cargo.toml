@@ -2,39 +2,59 @@
 members = [
     "crates/core",
     "crates/storage",
-    "crates/execution",
-    "crates/reflection",
-    "crates/evolution",
+    "crates/knowledge",
+    "crates/quality",
+    "crates/progress",
+    "crates/work",
+    "crates/tools",
+    "crates/ai",
     "crates/cli",
-    "crates/mcp",
 ]
 
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 license = "MIT"
 authors = ["Jerry"]
 repository = "https://github.com/jerryg/DevMan"
 
 [workspace.dependencies]
+# Async runtime
 tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+
+# Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# Error handling
 thiserror = "1"
+anyhow = "1"
+
+# Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# CLI
 clap = { version = "4", features = ["derive"] }
+
+# Git
 git2 = "0.18"
+
+# Time
 chrono = { version = "0.4", features = ["serde"] }
+
+# IDs
 ulid = { version = "1", features = ["serde"] }
-async-trait = "0.1"
-anyhow = "1"
 
 # Internal crates
 devman-core = { path = "crates/core" }
 devman-storage = { path = "crates/storage" }
-devman-execution = { path = "crates/execution" }
-devman-reflection = { path = "crates/reflection" }
-devman-evolution = { path = "crates/evolution" }
+devman-knowledge = { path = "crates/knowledge" }
+devman-quality = { path = "crates/quality" }
+devman-progress = { path = "crates/progress" }
+devman-work = { path = "crates/work" }
+devman-tools = { path = "crates/tools" }
+devman-ai = { path = "crates/ai" }

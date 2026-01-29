@@ -1,28 +1,20 @@
 [package]
-name = "devman-cli"
+name = "devman-quality"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
 
-[[bin]]
-name = "devman"
-path = "src/main.rs"
-
 [dependencies]
 devman-core = { workspace = true }
 devman-storage = { workspace = true }
-devman-knowledge = { workspace = true }
-devman-quality = { workspace = true }
-devman-progress = { workspace = true }
-devman-work = { workspace = true }
 devman-tools = { workspace = true }
-devman-ai = { workspace = true }
-clap = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
