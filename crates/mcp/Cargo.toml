@@ -1,0 +1,26 @@
+[package]
+name = "devman-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "devman-mcp"
+path = "src/main.rs"
+
+[dependencies]
+devman-core = { workspace = true }
+devman-storage = { workspace = true }
+devman-execution = { workspace = true }
+devman-reflection = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = "1"
+
+# MCP SDK - placeholder, adjust to actual MCP crate
+# mcp-sdk = { version = "0.1" }
