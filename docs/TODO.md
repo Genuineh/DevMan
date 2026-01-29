@@ -45,7 +45,7 @@ Layer 1: Storage & State       (存储与状态)
 
 ### Phase 2：存储层
 - [x] 扩展 `Storage` trait（支持新模型）
-- [x] 更新 `GitJsonStorage` 实现
+- [x] 更新 `JsonStorage` 实现
 - [x] 事务支持
 - [ ] 查询接口优化
 

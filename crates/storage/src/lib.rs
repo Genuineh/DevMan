@@ -6,7 +6,7 @@
 #![warn(missing_docs)]
 
 pub mod trait_;
-pub mod git_json;
+pub mod json_storage;
 
 pub use trait_::{Storage, StorageError, Result, Transaction};
-pub use git_json::GitJsonStorage;
+pub use json_storage::JsonStorage;

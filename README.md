@@ -12,7 +12,7 @@ DevMan 是一个面向 AI 的工作管理与质量保证基础设施，目标是
 
 核心特性
 - 结构化的 **Goal / Project / Phase / Task / WorkRecord** 数据模型
-- 文件 + JSON 的轻量存储后端 (`GitJsonStorage`)
+- 文件 + JSON 的轻量存储后端 (`JsonStorage`)
 - 可扩展的 **QualityEngine**（支持通用检查和自定义检查）
 - 基本的 **KnowledgeService** 和 **ProgressTracker** 实现
 - 内置工具执行（`cargo`、`npm`、`git`、`fs`）和 CLI 用法
@@ -83,9 +83,9 @@ devman-ai --help         # MCP server（如果已安装）
 - 查看目标详情
   - `cargo run -p devman-cli -- ShowGoal <goal-id>`
 
-> 注：CLI 使用 `GitJsonStorage`（默认目录 `.devman/`）保存数据。
+> 注：CLI 使用 `JsonStorage`（默认目录 `.devman/`）保存数据。
 >
-> **变更说明**：默认情况下，`GitJsonStorage` **不会** 自动初始化或管理仓库；存储为基于文件的 JSON 存储，项目通过在仓库根目录下创建 `.devman/` 文件夹来管理本地数据。
+> **变更说明**：默认情况下，`JsonStorage` 作为文件 + JSON 存储 **不会** 自动初始化或管理仓库；项目通过在仓库根目录下创建 `.devman/` 文件夹来管理本地数据。
 >
 > - 元数据：`.devman/meta/`（每个对象的版本标记，仅保存 `meta.json` 信息，包含版本号与时间戳）
 >

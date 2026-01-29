@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use tracing::{info, Level};
 use devman_core::{Goal, GoalId};
-use devman_storage::{GitJsonStorage, Storage};
+use devman_storage::{JsonStorage, Storage};
 
 #[derive(Parser)]
 #[command(name = "devman")]
@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
     let storage_path = std::path::PathBuf::from(".devman");
-    let mut storage = GitJsonStorage::new(&storage_path).await?;
+    let mut storage = JsonStorage::new(&storage_path).await?;
 
     match cli.command {
         Commands::CreateGoal { title, description } => {
