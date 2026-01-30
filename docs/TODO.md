@@ -107,15 +107,15 @@ Layer 1: Storage & State       (存储与状态)
 - [x] 事件记录
 - [x] 工作记录生成
 
-### Phase 7：工具集成 ⚙️ 进行中
+### Phase 7：工具集成 ✅
 - [x] `Tool` trait
 - [x] 内置工具
   - [x] Cargo
   - [x] Npm
   - [x] Git
   - [x] 文件系统
-- [ ] 工作流编排（多步骤流程定义）
-- [ ] 错误处理策略（重试、回滚、降级）
+- [x] 工作流编排（多步骤流程定义）
+- [x] 错误处理策略（重试、回滚、降级）
 
 ### Phase 8：AI 接口 🔄 部分完成
 - [x] `AIInterface` trait
@@ -426,7 +426,6 @@ struct CustomCheckSpec {
 - [x] CLI 基础实现
 
 ### 进行中 ⚙️
-- [ ] 工作流编排
 - [ ] MCP Server 完整实现
 
 ### 计划中 📋

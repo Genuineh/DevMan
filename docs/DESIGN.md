@@ -1448,28 +1448,250 @@ trait CustomTool: Tool {
 
 ### 工具编排
 
+#### 工作流定义
+
 ```rust
-struct Workflow {
-    name: String,
-    steps: Vec<WorkflowStep>,
+pub struct Workflow {
+    /// 工作流名称
+    pub name: String,
+
+    /// 描述
+    pub description: String,
+
+    /// 工作流步骤
+    pub steps: Vec<WorkflowStep>,
+
+    /// 整体错误处理策略
+    pub on_failure: FailureStrategy,
+
+    /// 工作流变量
+    pub variables: HashMap<String, String>,
+
+    /// 是否启用回滚
+    pub enable_rollback: bool,
 }
 
-struct WorkflowStep {
-    name: String,
-    tool: String,
-    parameters: HashMap<String, serde_json::Value>,
-    // 条件执行
-    condition: Option<Expression>,
-    // 错误处理
-    on_error: ErrorHandling,
+/// 工作流步骤
+pub struct WorkflowStep {
+    /// 步骤名称
+    pub name: String,
+
+    /// 描述
+    pub description: String,
+
+    /// 要执行的工具
+    pub tool: String,
+
+    /// 工具输入
+    pub input: ToolInput,
+
+    /// 失败处理策略
+    pub on_failure: FailureStrategy,
+
+    /// 条件执行
+    pub condition: Option<StepCondition>,
+
+    /// 失败时是否继续
+    pub continue_on_failure: bool,
+
+    /// 最大重试次数
+    pub max_retries: usize,
+
+    /// 重试延迟（毫秒）
+    pub retry_delay: u64,
 }
 
-enum ErrorHandling {
+/// 失败处理策略
+pub enum FailureStrategy {
+    /// 立即停止工作流
     Stop,
+
+    /// 跳过此步骤并继续
+    Skip,
+
+    /// 回滚之前的步骤
+    Rollback,
+
+    /// 继续执行（标记为失败）
     Continue,
-    Retry { max_attempts: usize },
-    Fallback { alternative_step: String },
 }
+
+/// 步骤执行条件
+pub enum StepCondition {
+    /// 仅当前一步骤成功时运行
+    PreviousSuccess(String),
+
+    /// 仅当前一步骤失败时运行
+    PreviousFailed(String),
+
+    /// 仅当变量等于特定值时运行
+    VariableEquals { name: String, value: String },
+
+    /// 仅当变量存在时运行
+    VariableExists(String),
+
+    /// 自定义条件
+    Custom(String),
+}
+```
+
+#### 工作流执行器
+
+```rust
+#[async_trait]
+pub trait WorkflowExecutor: Send + Sync {
+    /// 执行工作流
+    async fn execute(&self, workflow: &Workflow) -> Result<WorkflowResult, WorkflowError>;
+
+    /// 使用自定义变量执行工作流
+    async fn execute_with_vars(
+        &self,
+        workflow: &Workflow,
+        variables: &HashMap<String, String>,
+    ) -> Result<WorkflowResult, WorkflowError>;
+}
+
+/// 基础工作流执行器
+pub struct BasicWorkflowExecutor {
+    tools: HashMap<String, Arc<dyn Tool>>,
+}
+```
+
+#### 执行结果
+
+```rust
+pub struct WorkflowResult {
+    /// 工作流是否成功完成
+    pub success: bool,
+
+    /// 每个步骤的结果
+    pub step_results: Vec<StepResult>,
+
+    /// 总执行时长
+    pub duration: std::time::Duration,
+
+    /// 错误信息
+    pub error: Option<String>,
+}
+
+pub struct StepResult {
+    /// 步骤名称
+    pub name: String,
+
+    /// 是否成功
+    pub success: bool,
+
+    /// 工具输出
+    pub output: Option<ToolOutput>,
+
+    /// 执行时长
+    pub duration: std::time::Duration,
+
+    /// 错误信息
+    pub error: Option<String>,
+
+    /// 是否被跳过
+    pub skipped: bool,
+}
+```
+
+#### 使用示例
+
+```rust
+// 创建工作流
+let workflow = Workflow::new("Release Process")
+    .description("Build, test, and release the project")
+    .variable("project", "myproject")
+    .variable("version", "1.0.0")
+    .with_rollback()
+    .on_failure(FailureStrategy::Rollback)
+    .step(
+        WorkflowStepBuilder::new("Build", "cargo")
+            .args(vec!["build".to_string(), "--release".to_string()])
+            .on_failure(FailureStrategy::Stop)
+            .max_retries(2)
+            .build()
+    )
+    .step(
+        WorkflowStepBuilder::new("Test", "cargo")
+            .args(vec!["test".to_string()])
+            .condition(StepCondition::PreviousSuccess("Build".to_string()))
+            .on_failure(FailureStrategy::Rollback)
+            .build()
+    )
+    .step(
+        WorkflowStepBuilder::new("Package", "cargo")
+            .args(vec!["pack".to_string()])
+            .condition(StepCondition::PreviousSuccess("Test".to_string()))
+            .build()
+    );
+
+// 执行工作流
+let executor = BasicWorkflowExecutor::new(vec![
+    Arc::new(CargoTool),
+    Arc::new(NpmTool),
+    Arc::new(GitTool),
+    Arc::new(FsTool),
+]);
+
+let result = executor.execute(&workflow).await?;
+
+if result.success {
+    println!("Workflow completed in {:?}", result.duration);
+} else {
+    eprintln!("Workflow failed: {:?}", result.error);
+}
+```
+
+#### 变量替换
+
+工作流支持在工具输入中使用变量：
+
+```rust
+// 定义工作流变量
+workflow.variable("project", "myapp");
+workflow.variable("version", "1.0.0");
+
+// 在步骤中使用变量
+WorkflowStepBuilder::new("Build", "cargo")
+    .args(vec!["build".to_string(), "{project}".to_string()])
+    .env("VERSION", "{version}")  // 环境变量也会被替换
+    .stdin("{project} build data")  // stdin 也会被替换
+    .build()
+```
+
+#### 条件执行
+
+步骤可以根据条件决定是否执行：
+
+```rust
+// 仅当测试失败时运行
+WorkflowStepBuilder::new("Debug", "cargo")
+    .args(vec!["test".to_string(), "--no-fail-fast".to_string()])
+    .condition(StepCondition::PreviousFailed("Test".to_string()))
+    .build()
+
+// 仅当特定变量存在时运行
+WorkflowStepBuilder::new("Deploy", "npm")
+    .args(vec!["publish".to_string()])
+    .condition(StepCondition::VariableExists("DEPLOY_KEY".to_string()))
+    .build()
+```
+
+#### 错误策略
+
+```rust
+// 遇到错误立即停止
+.on_failure(FailureStrategy::Stop)
+
+// 遇到错误跳过此步骤
+.on_failure(FailureStrategy::Skip)
+
+// 遇到错误回滚之前的步骤
+.on_failure(FailureStrategy::Rollback)
+
+// 遇到错误继续执行
+.on_failure(FailureStrategy::Continue)
 ```
 
 ---
