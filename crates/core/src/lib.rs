@@ -32,7 +32,7 @@ pub use phase::{Phase, PhaseStatus, PhaseProgress, AcceptanceCriterion};
 
 // Task & Work
 pub use task::{
-    Task, TaskStatus, TaskProgress, TaskLink, LinkKind, TaskFilter,
+    Task, TaskStatus, TaskState, AbandonReason, ChangeImpact, TaskProgress, TaskLink, LinkKind, TaskFilter,
     TaskIntent, TaskContext, ExecutionStep, QualityGate, PassCondition, FailureAction,
     Input, ExpectedOutput,
 };
