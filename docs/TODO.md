@@ -66,9 +66,9 @@ Layer 1: Storage & State       (存储与状态)
   - [x] `CustomCheckSpec` 设计
   - [x] 命令执行
   - [x] 输出解析（增强正则/JsonPath 解析）
-- [ ] 人机协作接口
+- [x] 人机协作接口
   - [x] `HumanReviewSpec`
-  - [ ] 通知机制（Slack/Email/Webhook）
+  - [x] 通知机制（Slack/Email/Webhook）
   - [x] 评审表单
 - [x] 质检编排
   - [x] `QualityProfile`
@@ -423,8 +423,6 @@ struct CustomCheckSpec {
 - [x] CLI 基础实现
 
 ### 进行中 ⚙️
-- [ ] 质检输出解析增强
-- [ ] 通知机制实现
 - [ ] 知识模板系统
 - [ ] 工作流编排
 - [ ] MCP Server 完整实现

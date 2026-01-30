@@ -19,3 +19,4 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 regex = { workspace = true }
+reqwest = { workspace = true }

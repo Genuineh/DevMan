@@ -52,6 +52,9 @@ ulid = { version = "1", features = ["serde"] }
 # Parsing
 regex = "1"
 
+# HTTP client (for webhooks)
+reqwest = { version = "0.12", features = ["json"] }
+
 # Internal crates
 devman-core = { path = "crates/core" }
 devman-storage = { path = "crates/storage" }

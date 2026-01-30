@@ -941,7 +941,155 @@ enum NotificationChannel {
     Email { recipients: Vec<String> },
     Slack { webhook: String },
     Webhook { url: String },
+    Console,  // For testing/logging
 }
+
+/// 通知服务
+///
+/// # 通知渠道说明
+///
+/// ## 1. Slack Webhook
+/// 发送格式化的消息到 Slack 频道：
+/// ```rust
+/// let channel = NotificationChannel::Slack {
+///     webhook: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL".to_string()
+/// };
+/// ```
+///
+/// ## 2. 邮件通知
+/// 发送评审请求到指定邮箱：
+/// ```rust
+/// let channel = NotificationChannel::Email {
+///     recipients: vec![
+///         "reviewer@example.com".to_string(),
+///         "team@example.com".to_string(),
+///     ]
+/// };
+/// ```
+///
+/// ## 3. 通用 Webhook
+/// 发送 JSON 格式的 POST 请求到自定义端点：
+/// ```rust
+/// let channel = NotificationChannel::Webhook {
+///     url: "https://your-server.com/api/devman/reviews".to_string()
+/// };
+/// ```
+///
+/// # Webhook 负载格式
+///
+/// 通用 Webhook 发送以下 JSON 格式：
+/// ```json
+/// {
+///   "type": "review_request",
+///   "guide": "Review the pricing calculation changes",
+///   "reviewers": ["reviewer@example.com"],
+///   "questions": ["Is the calculation correct?", "Are edge cases handled?"],
+///   "context": {
+///     "description": "Review pricing module changes",
+///     "files": ["src/pricing.rs", "tests/pricing_test.rs"],
+///     "check_results": ["Coverage: 85%", "All tests passed"]
+///   }
+/// }
+/// ```
+///
+/// # 使用示例
+///
+/// ```rust
+/// use devman_quality::human::{HumanReviewService, NotificationChannel, ReviewContext};
+///
+/// let service = HumanReviewService::new(
+///     NotificationChannel::Slack {
+///         webhook: std::env::var("SLACK_WEBHOOK_URL").unwrap()
+///     }
+/// );
+///
+/// let context = ReviewContext {
+///     description: "Review pricing calculation changes".to_string(),
+///     files: vec!["src/pricing.rs".to_string()],
+///     check_results: vec!["Coverage: 85%".to_string()],
+/// };
+///
+/// service.send_notification(&spec, &context).await?;
+/// ```
+```
+
+### 业务质检示例
+
+#### 示例 1：测试覆盖率检查
+```rust
+use devman_quality::custom::CustomCheckBuilder;
+use devman_core::{OutputParser, MetricExtractor, QualityCategory};
+
+let coverage_check = CustomCheckBuilder::new("test-coverage")
+    .description("Ensure test coverage is at least 80%")
+    .severity(devman_core::Severity::Error)
+    .category(QualityCategory::Testing)
+    .command("cargo")
+    .arg("test")
+    .arg("--no-fail-fast")
+    .output_parser(OutputParser::Regex {
+        pattern: r"Coverage: (?P<coverage>[0-9.]+)%".to_string()
+    })
+    .pass_condition("coverage >= 80")
+    .extract_metric(MetricExtractor {
+        name: "coverage_percent".to_string(),
+        extractor: OutputParser::Regex {
+            pattern: r"Coverage: (?P<value>[0-9.]+)%".to_string()
+        },
+        unit: Some("%".to_string()),
+    })
+    .build();
+```
+
+#### 示例 2：JSON 输出验证
+```rust
+use devman_quality::custom::CustomCheckBuilder;
+use devman_core::OutputParser;
+
+let api_check = CustomCheckBuilder::new("api-health-check")
+    .description("Verify API health endpoint returns success")
+    .command("curl")
+    .arg("-s")
+    .arg("https://api.example.com/health")
+    .output_parser(OutputParser::JsonPath {
+        path: "status".to_string()
+    })
+    .pass_condition("value == healthy")
+    .build();
+```
+
+#### 示例 3：带人工评审的业务规则检查
+```rust
+use devman_quality::custom::CustomCheckBuilder;
+use devman_core::{OutputParser, HumanReviewSpec, ReviewQuestion, AnswerType};
+
+let business_check = CustomCheckBuilder::new("pricing-rules")
+    .description("Verify pricing calculation follows business rules")
+    .category(QualityCategory::Business)
+    .command("python")
+    .arg("scripts/validate_pricing.py")
+    .output_parser(OutputParser::LineContains {
+        text: "Validation complete".to_string()
+    })
+    .human_review(HumanReviewSpec {
+        reviewers: vec!["pricing-team@example.com".to_string()],
+        review_guide: "Review the pricing calculation validation results".to_string(),
+        review_form: vec![
+            ReviewQuestion {
+                question: "Are all pricing rules correctly implemented?".to_string(),
+                answer_type: AnswerType::YesNo,
+                required: true,
+            },
+            ReviewQuestion {
+                question: "Rate the confidence in the implementation".to_string(),
+                answer_type: AnswerType::Rating { min: 1, max: 5 },
+                required: true,
+            },
+        ],
+        timeout: std::time::Duration::from_secs(24 * 60 * 60),
+        auto_pass_threshold: Some(4.0), // Auto-pass if rating >= 4
+    })
+    .build();
 ```
 
 ---
