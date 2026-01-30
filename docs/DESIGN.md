@@ -1696,63 +1696,636 @@ WorkflowStepBuilder::new("Deploy", "npm")
 
 ---
 
-## AI 交互接口
+## AI 交互接口（Phase 8）
 
-### MCP/CLI 接口设计
+### 交互式任务管理设计
+
+DevMan 采用**严格状态管控**和**交互式引导**的方式，确保 AI 按照正确的流程完成任务。
+
+#### 核心设计理念
+
+1. **状态机管控** - 任务通过状态机严格控制进度
+2. **交互式引导** - 系统主动告诉 AI 下一步应该做什么
+3. **负反馈机制** - 跳过步骤会被拒绝并提示
+4. **状态校验** - 只有完成前置条件才能进入下一状态
+
+#### 任务状态机
 
 ```rust
-// 给 AI 的高级接口
-trait AIInterface {
-    // 1. 上下文查询
-    fn get_current_context(&self) -> WorkContext;
+/// 任务状态 - 简化设计（10 个状态）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TaskState {
+    /// 任务已创建
+    Created { created_at: Time, created_by: String },
 
-    // 2. 知识检索
-    fn search_knowledge(&self, query: &str) -> Vec<Knowledge>;
-    fn get_relevant_practices(&self, domain: &str) -> Vec<Knowledge>;
+    /// 上下文已读取
+    ContextRead { read_at: Time },
 
-    // 3. 进度查询
-    fn get_progress(&self, goal_id: GoalId) -> GoalProgress;
-    fn list_blockers(&self) -> Vec<Blocker>;
+    /// 相关知识已学习
+    KnowledgeReviewed { knowledge_ids: Vec<KnowledgeId>, reviewed_at: Time },
 
-    // 4. 任务操作
-    fn create_task(&mut self, spec: TaskSpec) -> Result<Task>;
-    fn start_task(&mut self, task_id: TaskId) -> Result<WorkRecord>;
-    fn complete_task(&mut self, task_id: TaskId, result: WorkResult) -> Result<()>;
+    /// 执行中
+    InProgress { started_at: Time, checkpoint: Option<String> },
 
-    // 5. 质检操作
-    fn run_quality_check(&mut self, check: QualityCheck) -> QualityCheckResult;
-    fn get_quality_status(&self, task_id: TaskId) -> QualityStatus;
+    /// 工作已记录，等待质检
+    WorkRecorded { record_id: WorkRecordId, recorded_at: Time },
 
-    // 6. 工具执行（减少 token）
-    fn execute_tool(&mut self, tool: String, input: ToolInput) -> ToolOutput;
+    /// 质检中
+    QualityChecking { check_id: QualityCheckId, started_at: Time },
 
-    // 7. 知识沉淀
-    fn save_knowledge(&mut self, knowledge: Knowledge) -> Result<()>;
+    /// 质检完成
+    QualityCompleted { result: QualityCheckResult, completed_at: Time },
+
+    /// 暂停（可恢复）
+    Paused { paused_at: Time, reason: String, previous_state: Box<TaskState> },
+
+    /// 已放弃（统一所有无法继续完成的情况）
+    Abandoned { abandoned_at: Time, reason: AbandonReason },
+
+    /// 已完成
+    Completed { completed_at: Time, completed_by: String },
 }
 
-// 质检状态
-struct QualityStatus {
-    task_id: TaskId,
-    total_checks: usize,
-    passed_checks: usize,
-    failed_checks: usize,
-    warnings: usize,
-    overall_status: QualityOverallStatus,
-    pending_human_review: bool,
+/// 状态转换流程（正常流程）
+Created → ContextRead → KnowledgeReviewed → InProgress → WorkRecorded → QualityChecking → QualityCompleted → Completed
+
+/// 状态转换（异常流程）
+- 任何状态 → Paused → 恢复到之前的状态
+- 任何状态 → Abandoned
+- QualityCompleted → InProgress（修复问题）
+```
+
+#### 放弃任务原因（统一处理）
+
+```rust
+/// 放弃任务的原因（涵盖所有无法继续完成的情况）
+#[derive(Debug, Clone)]
+pub enum AbandonReason {
+    /// AI/开发者主动放弃
+    Voluntary { reason: String, can_be_reassigned: bool },
+
+    /// 项目取消
+    ProjectCancelled { reason: String, cancelled_by: String },
+
+    /// 目标取消
+    GoalCancelled { goal_id: GoalId, reason: String },
+
+    /// 需求变更（无法适应）
+    RequirementChanged {
+        old_requirement: String,
+        new_requirement: String,
+        impact: ChangeImpact,
+    },
+
+    /// 依赖任务失败
+    DependencyFailed { dependency_task_id: TaskId, failure_reason: String },
+
+    /// 缺少必要信息
+    InsufficientInformation { missing_info: Vec<String> },
+
+    /// 技术限制（无法实现）
+    TechnicalLimitation { limitation: String, suggested_alternative: Option<String> },
+
+    /// 资源不可用
+    ResourceUnavailable { resource: String, reason: String },
+
+    /// 超时
+    Timeout { deadline: Time, actual_completion: Option<Time> },
+
+    /// 质检持续失败
+    QualityCheckFailed { attempts: usize, remaining_issues: Vec<String> },
+
+    /// 其他原因
+    Other { reason: String, details: Option<String> },
 }
 
-enum QualityOverallStatus {
-    NotChecked,
-    Passed,
-    PassedWithWarnings,
-    Failed,
-    PendingReview,
+/// 变更影响
+#[derive(Debug, Clone)]
+pub enum ChangeImpact {
+    /// 可以继续
+    CanContinue,
+
+    /// 需要重新学习知识
+    NeedsReview,
+
+    /// 需要重新执行
+    NeedsReexecution,
+
+    /// 需要完全重新开始
+    NeedsRestart,
+}
+```
+
+#### 交互式 AI 接口
+
+```rust
+#[async_trait]
+pub trait InteractiveAI: Send + Sync {
+    // ==================== 任务生命周期 ====================
+
+    /// 创建新任务
+    async fn create_task(&self, request: CreateTaskRequest) -> Result<TaskId>;
+
+    /// 放弃任务（统一入口）
+    async fn abandon_task(
+        &self,
+        task_id: TaskId,
+        reason: AbandonReason,
+    ) -> Result<AbandonResult>;
+
+    /// 完成任务
+    async fn complete_task(
+        &self,
+        task_id: TaskId,
+        summary: TaskCompletionSummary,
+    ) -> Result<()>;
+
+    // ==================== 任务引导 ====================
+
+    /// 获取任务当前状态及下一步引导（AI 每次操作前应调用）
+    async fn get_task_guidance(&self, task_id: TaskId) -> Result<TaskGuidance>;
+
+    /// 列出任务
+    async fn list_tasks(&self, filter: TaskFilter) -> Result<Vec<TaskSummary>>;
+
+    // ==================== 正常流程 ====================
+
+    /// 阶段 1: 读取上下文
+    async fn read_task_context(&self, task_id: TaskId) -> Result<TaskContext>;
+
+    /// 阶段 2: 学习知识
+    async fn review_knowledge(
+        &self,
+        task_id: TaskId,
+        query: &str,
+    ) -> Result<KnowledgeReviewResult>;
+
+    /// 确认知识学习完成
+    async fn confirm_knowledge_reviewed(
+        &self,
+        task_id: TaskId,
+        knowledge_ids: Vec<KnowledgeId>,
+    ) -> Result<()>;
+
+    /// 阶段 3: 开始执行
+    async fn start_execution(&self, task_id: TaskId) -> Result<ExecutionSession>;
+
+    /// 记录工作进展
+    async fn log_work(&self, task_id: TaskId, log: WorkLogEntry) -> Result<()>;
+
+    /// 提交工作成果
+    async fn finish_work(
+        &self,
+        task_id: TaskId,
+        result: WorkSubmission,
+    ) -> Result<WorkRecordId>;
+
+    /// 阶段 4: 运行质检
+    async fn run_quality_check(
+        &self,
+        task_id: TaskId,
+        checks: Vec<QualityCheckType>,
+    ) -> Result<QualityCheckId>;
+
+    /// 获取质检结果
+    async fn get_quality_result(&self, check_id: QualityCheckId) -> Result<QualityCheckResult>;
+
+    /// 确认质检结果
+    async fn confirm_quality_result(
+        &self,
+        task_id: TaskId,
+        check_id: QualityCheckId,
+        decision: QualityDecision,
+    ) -> Result<()>;
+
+    // ==================== 任务控制 ====================
+
+    /// 暂停任务
+    async fn pause_task(&self, task_id: TaskId, reason: String) -> Result<()>;
+
+    /// 恢复任务
+    async fn resume_task(&self, task_id: TaskId) -> Result<()>;
+
+    // ==================== 需求变更 ====================
+
+    /// 处理需求变更
+    async fn handle_requirement_change(
+        &self,
+        task_id: TaskId,
+        change: RequirementChange,
+    ) -> Result<ChangeHandlingResult>;
+
+    // ==================== 任务重新分配 ====================
+
+    /// 请求重新分配
+    async fn request_reassignment(
+        &self,
+        task_id: TaskId,
+        reason: String,
+    ) -> Result<ReassignmentRequest>;
+
+    /// 接受重新分配的任务
+    async fn accept_reassigned_task(
+        &self,
+        task_id: TaskId,
+        request_id: ReassignmentRequestId,
+    ) -> Result<TaskHandover>;
+}
+```
+
+#### 任务引导信息
+
+```rust
+/// 任务引导信息（系统告诉 AI 应该做什么）
+pub struct TaskGuidance {
+    /// 当前状态
+    pub current_state: TaskState,
+
+    /// 下一步应该做什么
+    pub next_action: NextAction,
+
+    /// 前置条件是否满足
+    pub prerequisites_satisfied: bool,
+
+    /// 如果不满足，缺少什么
+    pub missing_prerequisites: Vec<String>,
+
+    /// 当前状态允许的操作
+    pub allowed_operations: Vec<String>,
+
+    /// 引导消息
+    pub guidance_message: String,
+
+    /// 任务健康状态
+    pub health: TaskHealth,
+}
+
+/// 下一步操作指引
+pub enum NextAction {
+    /// 需要读取上下文
+    ReadContext,
+
+    /// 需要学习知识
+    ReviewKnowledge { suggested_queries: Vec<String> },
+
+    /// 可以开始执行
+    StartExecution { suggested_workflow: Option<String> },
+
+    /// 继续执行并记录
+    ContinueExecution { required_logs: Vec<String> },
+
+    /// 需要提交工作
+    SubmitWork,
+
+    /// 需要运行质检
+    RunQualityCheck { required_checks: Vec<QualityCheckType> },
+
+    /// 需要修复质检问题
+    FixQualityIssues { issues: Vec<Finding> },
+
+    /// 可以完成任务
+    CompleteTask,
+
+    /// 任务已完成/已放弃
+    TaskFinished,
+}
+
+/// 任务健康状态
+#[derive(Debug, Clone)]
+pub enum TaskHealth {
+    Healthy,
+    Warning { warnings: Vec<String> },
+    Attention { issues: Vec<TaskIssue> },
+    Critical { blockers: Vec<String> },
+}
+```
+
+#### 操作结果（带负反馈）
+
+```rust
+/// 操作结果（带反馈）
+pub enum OperationResult<T> {
+    /// 成功
+    Success(T),
+
+    /// 拒绝 - 状态不允许
+    Rejected {
+        reason: String,
+        current_state: TaskState,
+        required_state: TaskState,
+        guidance: String,
+    },
+
+    /// 拒绝 - 缺少前置条件
+    MissingPrerequisites {
+        missing: Vec<Prerequisite>,
+        hints: Vec<String>,
+    },
+
+    /// 警告 - 但允许继续
+    Warning {
+        result: T,
+        warnings: Vec<String>,
+    },
 }
 ```
 
 ---
 
-## 典型工作流程
+## AI 使用工作流程
+
+### 交互式任务执行流程
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        AI 开始任务                              │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. 创建任务                                                     │
+│   AI: create_task({title: "实现用户认证"})                      │
+│   系统: 返回 task_id, 引导"请调用 read_task_context()"          │
+│   状态: Created                                                 │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 2. 读取上下文（必须）                                           │
+│   AI: get_task_guidance(task_id)                               │
+│   系统: "请先调用 read_task_context() 读取上下文"               │
+│   AI: read_task_context(task_id)                               │
+│   系统: 返回项目信息、依赖、质检要求                            │
+│   状态: ContextRead                                             │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 3. 学习知识（必须）                                             │
+│   AI: get_task_guidance(task_id)                               │
+│   系统: "请调用 review_knowledge() 学习相关知识"                │
+│   AI: review_knowledge(task_id, "authentication rust")          │
+│   系统: 返回相关知识, 建议必读内容                              │
+│   AI: confirm_knowledge_reviewed(task_id, [knowledge_ids])     │
+│   状态: KnowledgeReviewed                                      │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 4. 开始执行（必须学完知识）                                     │
+│   AI: start_execution(task_id)                                 │
+│   系统: 返回执行会话, 引导"使用 log_work() 记录工作"            │
+│   状态: InProgress                                              │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 5. 记录工作进展（执行过程中）                                   │
+│   AI: log_work(task_id, {action: "implemented JWT middleware"}) │
+│   AI: log_work(task_id, {action: "wrote unit tests"})          │
+│   系统: 记录每次工作进展                                        │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 6. 提交工作（必须记录）                                         │
+│   AI: finish_work(task_id, {artifacts: [...]})                  │
+│   系统: 检查是否有工作记录, 返回 record_id                      │
+│   状态: WorkRecorded                                            │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 7. 运行质检（必须）                                             │
+│   AI: run_quality_check(task_id, [compile, test, lint])         │
+│   系统: 返回 check_id, 状态变为 QualityChecking                 │
+│   AI: get_quality_result(check_id)                             │
+│   系统: 返回质检报告                                            │
+│   状态: QualityCompleted                                        │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 8. 完成任务或修复问题                                           │
+│   质检通过: complete_task(task_id, {summary: ...})             │
+│   质检失败: start_execution(task_id) 重新开始                  │
+│   状态: Completed 或回到 InProgress                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 负反馈场景示例
+
+#### 场景 1: AI 跳过读取上下文
+
+```
+AI: start_execution("task_001")  // 直接开始执行
+
+系统: Rejected {
+    "reason": "状态不允许",
+    "current_state": "Created",
+    "required_state": "KnowledgeReviewed",
+    "guidance": "请按以下顺序操作：
+        1. 调用 read_task_context() 读取上下文
+        2. 调用 review_knowledge() 学习知识
+        3. 再调用 start_execution() 开始执行"
+}
+```
+
+#### 场景 2: AI 跳过学习知识
+
+```
+AI: read_task_context("task_001")  // 读取了上下文
+→ 状态: ContextRead
+
+AI: start_execution("task_001")  // 直接开始执行
+
+系统: Rejected {
+    "reason": "缺少前置条件",
+    "missing_prerequisites": [
+        {
+            "name": "knowledge_review",
+            "description": "学习相关知识",
+            "how_to_satisfy": "调用 review_knowledge() 查询相关知识"
+        }
+    ],
+    "hints": [
+        "系统建议查询: authentication best practices",
+        "系统建议查询: JWT token rust implementation"
+    ]
+}
+```
+
+#### 场景 3: AI 执行未记录工作
+
+```
+AI: finish_work("task_001", {...})
+
+系统: Rejected {
+    "reason": "缺少工作记录",
+    "missing_prerequisites": [
+        {
+            "name": "work_logs",
+            "description": "工作进展记录",
+            "how_to_satisfy": "调用 log_work() 记录你的工作进展"
+        }
+    ],
+    "hints": [
+        "请记录: 实现了哪些功能",
+        "请记录: 运行了哪些测试",
+        "请记录: 遇到了什么问题"
+    ]
+}
+```
+
+### 任务放弃场景
+
+#### 场景 1: 项目取消
+
+```
+AI: abandon_task("task_001", ProjectCancelled {
+    reason: "产品方向调整，此功能不再需要",
+    cancelled_by: "product_manager"
+})
+
+系统: {
+    "success": true,
+    "new_state": "Abandoned",
+    "work_preserved": true,
+    "message": "任务已标记为放弃（项目取消）。工作记录已保存。"
+}
+```
+
+#### 场景 2: 需求变更太大
+
+```
+系统: handle_requirement_change("task_001", {
+    "description": "认证方式从 JWT 改为完整的 OAuth2 + SSO",
+    "impact": "NeedsRestart"
+})
+
+系统: {
+    "result": "RecommendNewTask",
+    "reason": "变更影响太大，建议放弃当前任务创建新任务",
+    "reusable_content": [
+        "已学习的 JWT 知识可能仍有参考价值",
+        "单元测试框架搭建经验可以复用"
+    ]
+}
+
+AI: abandon_task("task_001", RequirementChanged {
+    old_requirement: "实现 JWT 认证",
+    new_requirement: "实现完整的 OAuth2 + SSO 系统",
+    impact: ChangeImpact::NeedsRestart
+})
+```
+
+#### 场景 3: AI 主动放弃（缺少信息）
+
+```
+AI: abandon_task("task_001", InsufficientInformation {
+    missing_info: ["第三方 API 文档", "数据库 schema 定义"]
+})
+
+系统: {
+    "success": true,
+    "can_be_reassigned": true,
+    "work_reusable": true,
+    "suggestions_for_next": [
+        "在开始执行前，确保所有依赖信息都齐全",
+        "已学习的 JWT 相关知识仍然有用"
+    ]
+}
+```
+
+### 任务重新分配场景
+
+```
+// AI A 放弃任务
+AI A: abandon_task("task_001", Voluntary {
+    reason: "我对这个技术栈不熟悉",
+    can_be_reassigned: true
+})
+
+// 系统通知管理员，管理员批准重新分配
+
+// AI B 接受重新分配的任务
+AI B: accept_reassigned_task("task_001", "reassign_req_001")
+
+系统: {
+    "task": {...},
+    "current_state": "Abandoned",
+    "completed_work": [...],
+    "reviewed_knowledge": ["knowledge_jwt_01"],
+    "abandonment_reason": "对技术栈不熟悉",
+    "suggestions": [
+        "上一个 AI 已经学习了 JWT 相关知识",
+        "可以直接参考已完成的工作"
+    ],
+    "warnings": [
+        "注意：这个任务有特殊的 OAuth2 要求"
+    ],
+    "reusable_artifacts": [...]
+}
+
+系统引导: "你已接受此任务。请先查看已完成的工作，状态将重置为 Created。"
+→ 状态: Abandoned → Created (对 AI B 而言)
+```
+
+### 需求变更处理场景
+
+#### 场景 1: 小变更 - 可以继续
+
+```
+AI: handle_requirement_change("task_001", {
+    "description": "token 过期时间从 1小时 改为 2小时",
+    "impact": "CanContinue"
+})
+
+系统: {
+    "result": "CanContinue",
+    "message": "需求变更影响较小，可以直接继续执行"
+}
+```
+
+#### 场景 2: 中等变更 - 需要重新学习
+
+```
+AI: handle_requirement_change("task_001", {
+    "description": "增加 refresh token 支持",
+    "impact": "NeedsReview"
+})
+
+系统: {
+    "result": "NeedsReview",
+    "suggested_knowledge": ["refresh token best practices", "token rotation"],
+    "guidance": "请学习新知识后继续执行"
+}
+
+AI: review_knowledge("task_001", "refresh token rust")
+
+系统: "知识学习完成，可以继续执行"
+```
+
+#### 场景 3: 大变更 - 需要重新执行
+
+```
+AI: handle_requirement_change("task_001", {
+    "description": "认证方式从 JWT 改为 OAuth2",
+    "impact": "NeedsReexecution"
+})
+
+系统: {
+    "result": "NeedsReexecution",
+    "affected_work": ["src/auth/jwt.rs", "src/auth/middleware.rs"],
+    "guidance": "需求变更影响中等。已做的工作需要调整，请重新执行。"
+}
+
+AI: start_execution("task_001")  // 重新开始执行
+```
+
+---
+
+## 典型工作流程（更新版）
 
 ### 场景 1：AI 开始新项目
 
@@ -1822,6 +2395,222 @@ enum QualityOverallStatus {
 
 ---
 
+## MCP Server 设计
+
+### MCP 协议结构
+
+```
+DevMan MCP Server
+├── Tools (可调用的工具)
+│   ├── devman_get_task_guidance       # 获取任务引导
+│   ├── devman_create_task             # 创建任务
+│   ├── devman_read_task_context       # 读取上下文
+│   ├── devman_review_knowledge        # 学习知识
+│   ├── devman_confirm_knowledge_reviewed # 确认知识学习
+│   ├── devman_start_execution         # 开始执行
+│   ├── devman_log_work                # 记录工作
+│   ├── devman_finish_work             # 提交工作
+│   ├── devman_run_quality_check       # 运行质检
+│   ├── devman_get_quality_result      # 获取质检结果
+│   ├── devman_confirm_quality_result  # 确认质检结果
+│   ├── devman_complete_task           # 完成任务
+│   ├── devman_pause_task              # 暂停任务
+│   ├── devman_resume_task             # 恢复任务
+│   ├── devman_abandon_task            # 放弃任务
+│   ├── devman_handle_requirement_change # 处理需求变更
+│   └── devman_list_tasks              # 列出任务
+│
+├── Resources (可读取的资源)
+│   ├── devman://task/{id}             # 任务详情
+│   ├── devman://project/current       # 当前项目
+│   ├── devman://tasks/pending         # 待处理任务
+│   ├── devman://tasks/in_progress     # 进行中任务
+│   ├── devman://knowledge/{id}        # 知识详情
+│   └── devman://quality/status/{task_id} # 质检状态
+│
+└── Prompts (预定义提示模板)
+    ├── devman_start_new_project       # 启动新项目
+    ├── devman_implement_feature       # 实现功能
+    ├── devman_fix_bug                 # 修复 Bug
+    └── devman_handle_issue            # 处理问题
+```
+
+### MCP Tool 定义示例
+
+```json
+{
+  "name": "devman_get_task_guidance",
+  "description": "获取任务当前状态及下一步引导。AI 每次操作前都应该调用此接口了解应该做什么。",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "task_id": {
+        "type": "string",
+        "description": "任务 ID"
+      }
+    },
+    "required": ["task_id"]
+  }
+}
+
+{
+  "name": "devman_create_task",
+  "description": "创建新任务",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "title": {"type": "string", "description": "任务标题"},
+      "description": {"type": "string", "description": "任务描述"},
+      "goal_id": {"type": "string", "description": "关联目标 ID（可选）"},
+      "phase_id": {"type": "string", "description": "关联阶段 ID（可选）"},
+      "estimated_duration": {"type": "string", "description": "预估时长（可选）"}
+    },
+    "required": ["title", "description"]
+  }
+}
+
+{
+  "name": "devman_abandon_task",
+  "description": "放弃任务（涵盖所有无法继续完成的情况：项目取消、需求变更、无法完成等）",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "task_id": {"type": "string"},
+      "reason_type": {
+        "type": "string",
+        "enum": [
+          "voluntary",
+          "project_cancelled",
+          "goal_cancelled",
+          "requirement_changed",
+          "dependency_failed",
+          "insufficient_info",
+          "technical_limitation",
+          "resource_unavailable",
+          "timeout",
+          "quality_failed",
+          "other"
+        ],
+        "description": "放弃原因类型"
+      },
+      "reason": {"type": "string", "description": "详细原因说明"},
+      "details": {"type": "object", "description": "附加信息"}
+    },
+    "required": ["task_id", "reason_type", "reason"]
+  }
+}
+
+{
+  "name": "devman_handle_requirement_change",
+  "description": "处理需求变更，系统会根据影响决定如何处理",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "task_id": {"type": "string"},
+      "change": {
+        "type": "object",
+        "properties": {
+          "description": {"type": "string"},
+          "change_type": {
+            "type": "string",
+            "enum": ["feature", "priority", "deadline", "dependency", "quality"]
+          },
+          "old_value": {},
+          "new_value": {}
+        }
+      }
+    },
+    "required": ["task_id", "change"]
+  }
+}
+```
+
+### MCP Resource 定义
+
+```
+devman://task/{id}
+→ 返回任务完整信息：状态、上下文、相关知识、工作记录、质检结果
+
+devman://project/current
+→ 返回当前项目信息： phases、active goals、配置
+
+devman://tasks/pending
+→ 返回所有待处理的任务列表
+
+devman://tasks/in_progress
+→ 返回所有进行中的任务列表
+
+devman://knowledge/{id}
+→ 返回知识详情：内容、示例、相关知识
+
+devman://quality/status/{task_id}
+→ 返回任务的质检状态和结果
+```
+
+### MCP Prompts 定义
+
+```json
+{
+  "name": "devman_implement_feature",
+  "description": "实现新功能的完整流程",
+  "arguments": [
+    {
+      "name": "feature_description",
+      "description": "功能描述",
+      "required": true
+    },
+    {
+      "name": "context",
+      "description": "额外上下文信息",
+      "required": false
+    }
+  ]
+}
+```
+
+使用时，MCP 客户端会展开为完整的提示词，引导 AI 按照正确的流程操作。
+
+### stdio 传输
+
+```rust
+use jsonrpsee::core::RpcResult;
+use jsonrpsee::proc_macros::rpc;
+
+#[rpc(server)]
+pub trait DevManMcp {
+    /// 获取任务引导
+    #[method(name = "devman.get_task_guidance")]
+    async fn get_task_guidance(&self, task_id: String) -> RpcResult<TaskGuidance>;
+
+    /// 创建任务
+    #[method(name = "devman.create_task")]
+    async fn create_task(&self, request: CreateTaskRequest) -> RpcResult<String>;
+
+    /// ... 其他方法
+}
+
+/// stdio 主循环
+pub async fn run_stdio_server() -> anyhow::Result<()> {
+    let server = DevManMcpServer::new(...).await?;
+
+    let module = rpc_module! {
+        server => DevManMcp,
+    };
+
+    let mut stdin = tokio::io::stdin();
+    let mut stdout = tokio::io::stdout();
+
+    // JSON-RPC over stdio
+    loop {
+        let line = stdin.read_line().await?;
+        let response = module.process_request(&line).await?;
+        writeln!(stdout, "{}", response)?;
+    }
+}
+```
+
+---
+
 ## Crate 结构（v3 更新：移除 Git 存储）
 
 ```
@@ -1869,12 +2658,15 @@ devman/
 │   │   ├── builtin (cargo, npm, git)
 │   │   └── custom
 │   │
-│   ├── ai/                      # AI 接口
-│   │   ├── interface
-│   │   └── mcp_server
+│   ├── ai/                      # AI 接口（Phase 8）
+│   │   ├── interface.rs          # 基础 AI 接口
+│   │   ├── interactive.rs        # 交互式 AI 接口
+│   │   ├── guidance.rs           # 任务引导逻辑
+│   │   ├── validation.rs         # 状态校验逻辑
+│   │   └── mcp_server.rs         # MCP Server 实现
 │   │
 │   └── cli/                     # 命令行工具
-│       └── main
+│       └── main.rs
 │
 └── docs/
     ├── DESIGN.md
@@ -1887,37 +2679,67 @@ devman/
 
 ## 优先级实现计划
 
-### Phase 1：核心数据模型
-- Goal/Project/Phase/Task/WorkRecord
-- QualityCheck 基础结构
-- Knowledge 基础结构
+### Phase 1：核心数据模型 ✅
+- [x] Goal/Project/Phase/Task/WorkRecord
+- [x] QualityCheck 基础结构
+- [x] Knowledge 基础结构
 
-### Phase 2：存储与基础服务
-- Storage trait + JsonStorage 实现（文件式 JSON）
-- 基础 CRUD
-- 事务支持
-- 元数据版本标记（meta.json）
+### Phase 2：存储与基础服务 ✅
+- [x] Storage trait + JsonStorage 实现（文件式 JSON）
+- [x] 基础 CRUD
+- [x] 事务支持
+- [x] 元数据版本标记（meta.json）
 
-### Phase 3：质量保证
-- 通用质检（编译、测试）
-- 质检引擎
-- 质检编排
+### Phase 3：质量保证 ✅
+- [x] 通用质检（编译、测试）
+- [x] 质检引擎
+- [x] 质检编排
+- [x] 业务质检扩展
+- [x] 输出解析（Regex/JsonPath）
+- [x] 人机协作
 
-### Phase 4：知识服务
-- 知识存储
-- 标签检索
-- 模板系统
+### Phase 4：知识服务 ✅
+- [x] 知识存储
+- [x] 标签检索
+- [x] 模板系统
+- [x] 相关性评分
 
-### Phase 5：工具集成
-- Tool trait
-- 内置工具
-- 工作流编排
+### Phase 5：进度追踪 🔄
+- [x] ProgressTracker trait
+- [x] 目标进度计算
+- [ ] 阻塞检测
+- [ ] 时间预估
 
-### Phase 6：AI 接口
-- 高层 API
-- MCP Server
+### Phase 6：工作管理 ✅
+- [x] WorkManager trait
+- [x] 任务创建和执行
+- [x] 上下文管理
+- [x] 事件记录
 
-### Phase 7：高级特性
+### Phase 7：工具集成 ✅
+- [x] Tool trait
+- [x] 内置工具（Cargo, Npm, Git, Fs）
+- [x] 工作流编排
+- [x] 错误处理策略
+
+### Phase 8：AI 接口 ⚙️
+- [x] AIInterface trait
+- [ ] 任务状态机实现
+  - [ ] TaskState 枚举（10 个状态）
+  - [ ] AbandonReason（11 种原因）
+  - [ ] 状态转换校验
+- [ ] 交互式 AI 接口
+  - [ ] InteractiveAI trait
+  - [ ] 任务引导逻辑
+  - [ ] 负反馈机制
+  - [ ] 任务控制（暂停/恢复/放弃）
+  - [ ] 需求变更处理
+  - [ ] 任务重新分配
+- [ ] MCP Server 实现
+  - [ ] MCP Tool 注册（16+ 工具）
+  - [ ] MCP Resources
+  - [ ] stdio 传输
+  - [ ] Prompts 模板
 - 业务质检扩展
 - 人机协作
 - 向量检索
