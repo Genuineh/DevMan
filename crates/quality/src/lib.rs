@@ -10,6 +10,7 @@ pub mod custom;
 pub mod registry;
 pub mod gate;
 pub mod human;
+pub mod parser;
 
 pub use engine::QualityEngine;
 pub use checks::{

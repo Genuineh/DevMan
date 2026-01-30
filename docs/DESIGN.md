@@ -568,6 +568,91 @@ struct ValidationSpec {
     extract_metrics: Vec<MetricExtractor>,
 }
 
+/// 输出解析器 - 支持多种解析策略
+///
+/// # 使用示例
+///
+/// ## 1. 正则表达式解析（提取命名捕获组）
+/// ```rust
+/// // 输出: "Coverage: 85.5%"
+/// OutputParser::Regex {
+///     pattern: r"Coverage: (?P<coverage>[0-9.]+)%".to_string()
+/// }
+/// // 解析结果: { "coverage": "85.5" }
+/// ```
+///
+/// ## 2. JsonPath 解析（从 JSON 输出中提取值）
+/// ```rust
+/// // 输出: {"status": "passed", "coverage": 85.5}
+/// OutputParser::JsonPath {
+///     path: "status".to_string()
+/// }
+/// // 解析结果: { "value": "passed", "status": "passed" }
+///
+/// // 支持嵌套路径
+/// OutputParser::JsonPath {
+///     path: "result.status".to_string()
+/// }
+///
+/// // 支持数组索引
+/// OutputParser::JsonPath {
+///     path: "items[0].name".to_string()
+/// }
+/// ```
+///
+/// ## 3. 行包含检查（简单文本匹配）
+/// ```rust
+/// // 输出: "Build succeeded\nAll tests passed"
+/// OutputParser::LineContains {
+///     text: "succeeded".to_string()
+/// }
+/// // 解析结果: { "contains": "true" }
+/// ```
+///
+/// # 通过条件表达式
+///
+/// pass_condition 支持以下表达式：
+///
+/// - `true` - 始终通过
+/// - `false` - 始终失败
+/// - `field == "value"` - 字符串相等
+/// - `field != "value"` - 字符串不等
+/// - `field > 10` - 数值大于
+/// - `field >= 10` - 数值大于等于
+/// - `field < 10` - 数值小于
+/// - `field <= 10` - 数值小于等于
+/// - `field` - 检查字段是否存在且非空
+///
+/// # 完整示例
+///
+/// ```rust
+/// // 检查测试覆盖率是否达标
+/// CustomCheckSpec {
+///     name: "coverage-check".to_string(),
+///     check_command: CommandSpec {
+///         command: "cargo".to_string(),
+///         args: vec!["test".to_string(), "--".to_string(), "--nocapture".to_string()],
+///         timeout: Duration::from_secs(300),
+///         expected_exit_code: Some(0),
+///     },
+///     validation: ValidationSpec {
+///         output_parser: OutputParser::Regex {
+///             pattern: r"Coverage: (?P<coverage>[0-9.]+)%".to_string(),
+///         },
+///         pass_condition: "coverage >= 80".to_string(),
+///         extract_metrics: vec![
+///             MetricExtractor {
+///                 name: "coverage".to_string(),
+///                 extractor: OutputParser::Regex {
+///                     pattern: r"(?P<value>[0-9.]+)%".to_string(),
+///                 },
+///                 unit: Some("%".to_string()),
+///             },
+///         ],
+///     },
+///     human_review: None,
+/// }
+/// ```
 enum OutputParser {
     JsonPath { path: String },
     Regex { pattern: String },

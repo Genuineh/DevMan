@@ -65,7 +65,7 @@ Layer 1: Storage & State       (存储与状态)
 - [x] 业务质检扩展机制
   - [x] `CustomCheckSpec` 设计
   - [x] 命令执行
-  - [ ] 输出解析（增强正则/JsonPath 解析）
+  - [x] 输出解析（增强正则/JsonPath 解析）
 - [ ] 人机协作接口
   - [x] `HumanReviewSpec`
   - [ ] 通知机制（Slack/Email/Webhook）

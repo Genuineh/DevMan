@@ -2,11 +2,13 @@
 
 use async_trait::async_trait;
 use devman_core::{
-    QualityCheck, QualityCheckId, QualityCheckResult, QualityGate, TaskId,
-    QualityCategory, Finding, CheckDetails, Severity,
+    QualityCheck, QualityCheckResult, QualityGate, TaskId,
+    QualityCategory, Finding, CheckDetails, Severity, Metric,
 };
 use devman_storage::Storage;
 use std::sync::Arc;
+
+use crate::parser::{parse_output, evaluate_pass_condition, extract_metrics};
 
 /// Context for running quality checks.
 #[derive(Debug, Clone)]
@@ -162,9 +164,9 @@ impl<S: Storage> BasicQualityEngine<S> {
     async fn run_generic_check(
         &self,
         generic: &devman_core::GenericCheckType,
-        context: &WorkContext,
+        _context: &WorkContext,
     ) -> QualityCheckResult {
-        use devman_tools::{Tool, ToolInput};
+        use devman_tools::ToolInput;
         use std::time::Instant;
 
         let start = Instant::now();
@@ -256,7 +258,7 @@ impl<S: Storage> BasicQualityEngine<S> {
         &self,
         custom: &devman_core::CustomCheckSpec,
         check: &QualityCheck,
-        context: &WorkContext,
+        _context: &WorkContext,
     ) -> QualityCheckResult {
         tracing::debug!("Running custom check: {}", custom.name);
 
@@ -272,7 +274,7 @@ impl<S: Storage> BasicQualityEngine<S> {
             timeout: Some(custom.check_command.timeout),
         };
 
-        let output = match self
+        let tool_output = match self
             .tool_executor
             .execute_tool(&custom.check_command.command, input)
             .await
@@ -291,7 +293,7 @@ impl<S: Storage> BasicQualityEngine<S> {
                     findings: vec![Finding {
                         severity: Severity::Error,
                         category: QualityCategory::Correctness,
-                        message: format!("Custom check failed: {}", e),
+                        message: format!("Custom check command failed: {}", e),
                         location: None,
                         suggestion: None,
                     }],
@@ -301,23 +303,90 @@ impl<S: Storage> BasicQualityEngine<S> {
             }
         };
 
-        let passed = output.exit_code == 0;
+        // Combine stdout and stderr for parsing
+        let full_output = if tool_output.stderr.is_empty() {
+            tool_output.stdout.clone()
+        } else {
+            format!("{}\n{}", tool_output.stdout, tool_output.stderr)
+        };
+
+        // Check expected exit code first
+        let exit_code_match = match custom.check_command.expected_exit_code {
+            Some(expected) => tool_output.exit_code == expected,
+            None => true, // No expectation means any exit code is acceptable
+        };
+
+        if !exit_code_match {
+            return QualityCheckResult {
+                check_id: check.id,
+                passed: false,
+                execution_time: start.elapsed(),
+                details: CheckDetails {
+                    output: full_output.clone(),
+                    exit_code: Some(tool_output.exit_code),
+                    error: Some(format!(
+                        "Expected exit code {:?}, got {}",
+                        custom.check_command.expected_exit_code, tool_output.exit_code
+                    )),
+                },
+                findings: vec![Finding {
+                    severity: Severity::Error,
+                    category: check.category,
+                    message: format!(
+                        "Command exited with code {} (expected {:?})",
+                        tool_output.exit_code, custom.check_command.expected_exit_code
+                    ),
+                    location: None,
+                    suggestion: Some("Check the command and its arguments for correctness".to_string()),
+                }],
+                metrics: Vec::new(),
+                human_review: None,
+            };
+        }
+
+        // Parse the output using the validation spec
+        let parse_result = parse_output(&full_output, &custom.validation.output_parser);
+
+        // Evaluate the pass condition
+        let passed = if parse_result.success {
+            evaluate_pass_condition(&custom.validation.pass_condition, &parse_result)
+        } else {
+            false
+        };
+
+        // Generate findings based on parsing results
+        let mut findings = Vec::new();
+        if !parse_result.success {
+            findings.push(Finding {
+                severity: if passed { Severity::Warning } else { Severity::Error },
+                category: check.category,
+                message: parse_result.error.unwrap_or_else(|| "Output parsing failed".to_string()),
+                location: None,
+                suggestion: Some("Verify the command output format matches the expected parser pattern".to_string()),
+            });
+        }
+
+        // Extract metrics
+        let metrics: Vec<Metric> = extract_metrics(&full_output, &custom.validation.extract_metrics)
+            .into_iter()
+            .map(|m| Metric {
+                name: m.name,
+                value: m.value,
+                unit: m.unit,
+            })
+            .collect();
 
         QualityCheckResult {
             check_id: check.id,
             passed,
             execution_time: start.elapsed(),
-            details: devman_core::CheckDetails {
-                output: output.stdout,
-                exit_code: Some(output.exit_code),
-                error: if output.stderr.is_empty() {
-                    None
-                } else {
-                    Some(output.stderr)
-                },
+            details: CheckDetails {
+                output: full_output,
+                exit_code: Some(tool_output.exit_code),
+                error: None,
             },
-            findings: Vec::new(),
-            metrics: Vec::new(),
+            findings,
+            metrics,
             human_review: None,
         }
     }
