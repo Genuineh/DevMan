@@ -34,7 +34,10 @@ pub use phase::{Phase, PhaseStatus, PhaseProgress, AcceptanceCriterion};
 pub use task::{
     Task, TaskStatus, TaskState, AbandonReason, ChangeImpact, TaskProgress, TaskLink, LinkKind, TaskFilter,
     TaskIntent, TaskContext, ExecutionStep, QualityGate, PassCondition, FailureAction,
-    Input, ExpectedOutput,
+    Input, ExpectedOutput, StateTransition,
+    // Task module's simplified quality types
+    QualityCheckResult as TaskQualityCheckResult,
+    QualityOverallStatus as TaskQualityOverallStatus,
 };
 pub use work_record::{
     WorkRecord, WorkEvent, WorkEventType, Executor, WorkResult,

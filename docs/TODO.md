@@ -119,16 +119,16 @@ Layer 1: Storage & State       (存储与状态)
 
 ### Phase 8：AI 接口 ⚙️ 进行中
 - [x] `AIInterface` trait
-- [ ] 交互式任务管理系统
-  - [ ] 任务状态机实现
-  - [ ] 状态转换校验
-  - [ ] 任务引导逻辑
-  - [ ] 负反馈机制
+- [x] 交互式任务管理系统
+  - [x] 任务状态机实现（10状态 + AbandonReason）
+  - [x] 状态转换校验（StateTransition + 负反馈）
+  - [x] 任务引导逻辑（TaskGuidanceGenerator）
+  - [x] 负反馈机制（通过 StateTransition::RejectedRequiredAction）
 - [ ] 任务控制功能
-  - [ ] 暂停/恢复任务
-  - [ ] 放弃任务（统一处理）
-  - [ ] 需求变更处理
-  - [ ] 任务重新分配
+  - [ ] 暂停/恢复任务（InteractiveAI trait 已定义）
+  - [ ] 放弃任务（统一处理）（InteractiveAI trait 已定义）
+  - [ ] 需求变更处理（InteractiveAI trait 已定义）
+  - [ ] 任务重新分配（InteractiveAI trait 已定义）
 - [ ] MCP Server 实现（完整协议）
   - [ ] MCP Tool 注册
   - [ ] MCP Resources
@@ -191,8 +191,11 @@ devman/
 │   │   └── lib.rs
 │   │
 │   ├── ai/                      # AI 接口
-│   │   ├── interface.rs
-│   │   └── mcp_server.rs
+│   │   ├── interface.rs          # 基础 AI 接口
+│   │   ├── interactive.rs       # 交互式 AI trait + BasicInteractiveAI
+│   │   ├── validation.rs        # 状态转换验证
+│   │   ├── guidance.rs          # 任务引导生成
+│   │   └── mcp_server.rs        # MCP 服务器实现
 │   │
 │   └── cli/                     # 命令行
 │       └── main.rs
