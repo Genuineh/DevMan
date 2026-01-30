@@ -816,60 +816,257 @@ enum GateStrategy {
 ### 知识检索
 
 ```rust
-trait KnowledgeService {
-    // 语义搜索
-    fn search_semantic(&self, query: &str, limit: usize) -> Vec<Knowledge>;
+#[async_trait]
+pub trait KnowledgeService: Send + Sync {
+    /// 语义搜索（基于相关性评分）
+    async fn search_semantic(&self, query: &str, limit: usize) -> Vec<Knowledge>;
 
-    // 查找相似任务
-    fn find_similar_tasks(&self, task: &Task) -> Vec<Task>;
+    /// 查找相似任务（TODO: 待实现）
+    async fn find_similar_tasks(&self, task: &Task) -> Vec<Task>;
 
-    // 查找最佳实践
-    fn get_best_practices(&self, domain: &str) -> Vec<Knowledge>;
+    /// 获取领域最佳实践
+    async fn get_best_practices(&self, domain: &str) -> Vec<Knowledge>;
 
-    // 查找解决方案
-    fn find_solutions(&self, problem: &str) -> Vec<Knowledge>;
+    /// 基于任务上下文推荐知识
+    async fn recommend_knowledge(&self, context: &TaskContext) -> Vec<Knowledge>;
 
-    // 获取模板
-    fn get_template(&self, scenario: &str) -> Option<Knowledge>;
+    /// 标签检索（OR 逻辑 - 任一标签匹配）
+    async fn search_by_tags(&self, tags: &[String], limit: usize) -> Vec<Knowledge>;
 
-    // 推荐相关知识
-    fn recommend_knowledge(&self, context: &TaskContext) -> Vec<Knowledge>;
-}
+    /// 标签检索（AND 逻辑 - 所有标签必须匹配）
+    async fn search_by_tags_all(&self, tags: &[String], limit: usize) -> Vec<Knowledge>;
 
-// 向量检索（可选，用于语义搜索）
-struct VectorIndex {
-    embeddings: Vec<(KnowledgeId, Embedding)>,
-    index: Option<VectorIndex>,  // 借用外部向量库
+    /// 获取所有唯一标签
+    async fn get_all_tags(&self) -> HashSet<String>;
+
+    /// 获取标签统计（标签 -> 使用次数）
+    async fn get_tag_statistics(&self) -> HashMap<String, usize>;
+
+    /// 查找相似知识（基于内容相似度）
+    async fn find_similar_knowledge(&self, knowledge: &Knowledge, limit: usize) -> Vec<Knowledge>;
+
+    /// 按类型获取知识
+    async fn get_by_type(&self, knowledge_type: KnowledgeType) -> Vec<Knowledge>;
+
+    /// 根据查询建议标签
+    async fn suggest_tags(&self, query: &str, limit: usize) -> Vec<String>;
 }
 ```
 
-### 知识复用
+#### 相关性评分算法
 
 ```rust
-struct KnowledgeTemplate {
-    template: Knowledge,
+fn calculate_relevance_score(&self, knowledge: &Knowledge, query_lower: &str) -> f64 {
+    let mut score = 0.0;
 
-    // 参数化
-    parameters: Vec<TemplateParameter>,
+    // 摘要匹配（最高权重）
+    if knowledge.content.summary.to_lowercase().contains(query_lower) {
+        score += 10.0;
+    }
 
-    // 使用说明
-    usage_guide: String,
+    // 详情匹配（中等权重）
+    if knowledge.content.detail.to_lowercase().contains(query_lower) {
+        score += 5.0;
+    }
+
+    // 标签匹配（高权重）
+    for tag in &knowledge.tags {
+        if tag.to_lowercase().contains(query_lower) {
+            score += 7.0;
+        }
+    }
+
+    // 领域匹配（较低权重）
+    for domain in &knowledge.metadata.domain {
+        if domain.to_lowercase().contains(query_lower) {
+            score += 3.0;
+        }
+    }
+
+    // 最佳实践或解决方案的加成
+    if matches!(knowledge.knowledge_type, KnowledgeType::BestPractice { .. } | KnowledgeType::Solution { .. }) {
+        score *= 1.2;
+    }
+
+    score
+}
+```
+
+### 知识模板
+
+#### 模板参数
+
+```rust
+#[derive(Debug, Clone)]
+pub struct TemplateParameter {
+    /// 参数名称
+    pub name: String,
+
+    /// 描述
+    pub description: String,
+
+    /// 默认值
+    pub default_value: Option<String>,
+
+    /// 是否必需
+    pub required: bool,
+}
+```
+
+#### 模板验证
+
+```rust
+pub struct TemplateValidation {
+    /// 是否通过验证
+    pub valid: bool,
+
+    /// 缺失的必需参数
+    pub missing_required: Vec<String>,
+
+    /// 错误信息
+    pub errors: Vec<String>,
 }
 
-struct TemplateParameter {
-    name: String,
-    description: String,
-    default_value: Option<String>,
-    required: bool,
+impl TemplateValidation {
+    pub fn success() -> Self { ... }
+    pub fn failure(missing_required: Vec<String>, errors: Vec<String>) -> Self { ... }
+}
+```
+
+#### 模板注册表
+
+```rust
+pub struct TemplateRegistry {
+    templates: Vec<KnowledgeTemplate>,
 }
 
-// 模板实例化
+impl TemplateRegistry {
+    pub fn new() -> Self { ... }
+    pub fn register(&mut self, template: KnowledgeTemplate) { ... }
+    pub fn get_by_name(&self, name: &str) -> Option<&KnowledgeTemplate> { ... }
+    pub fn list(&self) -> &[KnowledgeTemplate] { ... }
+    pub fn find_by_tag(&self, tag: &str) -> Vec<&KnowledgeTemplate> { ... }
+}
+```
+
+#### 模板构建器
+
+```rust
+pub struct TemplateBuilder { ... }
+
+impl TemplateBuilder {
+    pub fn new(name: impl Into<String>) -> Self { ... }
+    pub fn description(mut self, desc: impl Into<String>) -> Self { ... }
+    pub fn required_parameter(mut self, name: impl Into<String>, description: impl Into<String>) -> Self { ... }
+    pub fn optional_parameter(mut self, name: impl Into<String>, description: impl Into<String>, default: impl Into<String>) -> Self { ... }
+    pub fn tag(mut self, tag: impl Into<String>) -> Self { ... }
+    pub fn domain(mut self, domain: impl Into<String>) -> Self { ... }
+    pub fn build(self, summary: impl Into<String>, detail: impl Into<String>) -> KnowledgeTemplate { ... }
+}
+```
+
+#### 模板实例化
+
+```rust
 impl KnowledgeTemplate {
-    fn instantiate(&self, params: &HashMap<String, String>) -> Knowledge {
-        // 根据参数填充模板
+    /// 验证模板参数
+    pub fn validate(&self, params: &HashMap<String, String>) -> TemplateValidation {
+        // 检查所有必需参数是否提供
+        let mut missing_required: Vec<String> = Vec::new();
+        for param in &self.parameters {
+            if param.required && !params.contains_key(&param.name) {
+                missing_required.push(param.name.clone());
+            }
+        }
+        if !missing_required.is_empty() {
+            return TemplateValidation::failure(missing_required, vec!["Missing required parameters".to_string()]);
+        }
+        TemplateValidation::success()
+    }
+
+    /// 实例化模板
+    pub fn instantiate(&self, params: &HashMap<String, String>) -> Result<Knowledge, String> {
+        // 1. 验证参数
+        let validation = self.validate(params);
+        if !validation.valid {
+            return Err(format!("Template validation failed: {:?}", validation.missing_required));
+        }
+
+        // 2. 克隆模板并生成新 ID
+        let mut knowledge = self.template.clone();
+        knowledge.id = KnowledgeId::new();
+
+        // 3. 构建完整参数映射（包含默认值）
+        let mut full_params = HashMap::new();
+        for param in &self.parameters {
+            if let Some(value) = params.get(&param.name) {
+                full_params.insert(param.name.clone(), value.clone());
+            } else if let Some(default) = &param.default_value {
+                full_params.insert(param.name.clone(), default.clone());
+            }
+        }
+
+        // 4. 替换占位符
+        for (key, value) in &full_params {
+            let placeholder = format!("{{{{{}}}}}", key);
+            knowledge.content.summary = knowledge.content.summary.replace(&placeholder, value);
+            knowledge.content.detail = knowledge.content.detail.replace(&placeholder, value);
+
+            // 在示例中也要替换
+            for example in &mut knowledge.content.examples {
+                example.code = example.code.replace(&placeholder, value);
+                example.description = example.description.replace(&placeholder, value);
+            }
+        }
+
+        Ok(knowledge)
     }
 }
 ```
+
+#### 使用示例
+
+```rust
+// 创建模板
+let template = TemplateBuilder::new("REST API Endpoint")
+    .description("Standard REST API endpoint template")
+    .required_parameter("endpoint_name", "Name of the endpoint")
+    .required_parameter("method", "HTTP method (GET, POST, etc.)")
+    .optional_parameter("auth_required", "Whether auth is required", "false")
+    .tag("api")
+    .tag("rest")
+    .domain("backend")
+    .build(
+        "{{method}} /api/{{endpoint_name}}",
+        "Implement a {{method}} endpoint for {{endpoint_name}}. Auth: {{auth_required}}"
+    );
+
+// 注册模板
+let mut registry = TemplateRegistry::new();
+registry.register(template);
+
+// 实例化模板
+let template = registry.get_by_name("REST API Endpoint").unwrap();
+let mut params = HashMap::new();
+params.insert("endpoint_name".to_string(), "users".to_string());
+params.insert("method".to_string(), "GET".to_string());
+// auth_required uses default value
+
+let knowledge = template.instantiate(&params)?;
+// knowledge.content.summary == "GET /api/users"
+// knowledge.content.detail == "Implement a GET endpoint for users. Auth: false"
+```
+
+### 知识分类（TODO - 可选扩展）
+
+以下功能需要向量库支持，当前版本未实现：
+
+- [ ] 经验教训自动提取
+- [ ] 最佳实践推荐
+- [ ] 代码模式识别
+- [ ] 解决方案索引
+
+这些功能可以通过集成向量数据库（如 Qdrant、Milvus）或使用嵌入 API（如 OpenAI Embeddings）来实现。
 
 ---
 
