@@ -1,6 +1,8 @@
-# DevMan 开发规划 v2
+# DevMan 开发规划 v3
 
 > AI 的认知工作管理系统 - 外部大脑 + 项目经理 + 质检员
+
+> **v3 变更说明**: 移除存储层的 Git 功能，使用纯文件式 JSON 存储。版本管理由项目自身的 Git 仓库负责。
 
 ## 项目定位
 
@@ -32,7 +34,7 @@ Layer 1: Storage & State       (存储与状态)
 
 ## 开发路线图
 
-### Phase 1：核心数据模型重构
+### Phase 1：核心数据模型 ✅
 - [x] 项目初始化
 - [x] 重构核心数据结构
   - [x] `Goal` - 顶层目标，带成功标准和进度
@@ -42,14 +44,17 @@ Layer 1: Storage & State       (存储与状态)
   - [x] `WorkRecord` - 详细工作日志
   - [x] `Knowledge` - 多类型知识资产
   - [x] `QualityCheck` - 通用 + 业务质检
+  - [x] `Event` - 事件系统
 
-### Phase 2：存储层
+### Phase 2：存储层 ✅
 - [x] 扩展 `Storage` trait（支持新模型）
-- [x] 更新 `JsonStorage` 实现
-- [x] 事务支持
-- [ ] 查询接口优化
+- [x] 实现 `JsonStorage`（文件式 JSON 存储）
+- [x] 元数据版本标记（meta.json 仅含版本号和时间戳）
+- [x] 查询接口（按状态筛选任务、按关联查询等）
 
-### Phase 3：质量保证（核心）
+> **注意**: 移除了自动 Git 功能。全量快照由项目自身的 Git 仓库管理。
+
+### Phase 3：质量保证（核心）⚙️ 进行中
 - [x] `QualityEngine` trait
 - [x] 通用质检实现
   - [x] 编译检查
@@ -60,64 +65,64 @@ Layer 1: Storage & State       (存储与状态)
 - [x] 业务质检扩展机制
   - [x] `CustomCheckSpec` 设计
   - [x] 命令执行
-  - [ ] 输出解析
+  - [ ] 输出解析（增强正则/JsonPath 解析）
 - [ ] 人机协作接口
   - [x] `HumanReviewSpec`
-  - [ ] 通知机制
+  - [ ] 通知机制（Slack/Email/Webhook）
   - [x] 评审表单
 - [x] 质检编排
   - [x] `QualityProfile`
   - [x] `QualityGate`
   - [x] 策略配置
 
-### Phase 4：知识服务
+### Phase 4：知识服务 🔄 部分完成
 - [x] `KnowledgeService` trait
-- [x] 知识检索
-  - [ ] 标签检索
-  - [ ] 相似度匹配
+- [x] 知识检索基础
   - [x] 上下文推荐
+  - [ ] 标签检索（增强）
+  - [ ] 相似度匹配（可选，需要向量库）
 - [ ] 知识模板
   - [ ] 参数化模板
   - [ ] 模板实例化
-- [ ] 知识分类
-  - [ ] 经验教训
-  - [ ] 最佳实践
-  - [ ] 代码模式
-  - [ ] 解决方案
+- [ ] 知识分类增强
+  - [ ] 经验教训自动提取
+  - [ ] 最佳实践推荐
+  - [ ] 代码模式识别
+  - [ ] 解决方案索引
 
-### Phase 5：进度追踪
+### Phase 5：进度追踪 🔄 部分完成
 - [x] `ProgressTracker` trait
 - [x] 目标进度计算
 - [x] 阶段里程碑追踪
-- [ ] 阻塞检测
-- [ ] 完成时间预估
+- [ ] 阻塞检测（自动识别依赖关系）
+- [ ] 完成时间预估（基于历史数据）
 
-### Phase 6：工作管理
+### Phase 6：工作管理 ✅
 - [x] `WorkManager` trait
 - [x] 任务创建和执行
 - [x] 上下文管理
 - [x] 事件记录
 - [x] 工作记录生成
 
-### Phase 7：工具集成
+### Phase 7：工具集成 ⚙️ 进行中
 - [x] `Tool` trait
 - [x] 内置工具
   - [x] Cargo
   - [x] Npm
   - [x] Git
   - [x] 文件系统
-- [ ] 工作流编排
-- [ ] 错误处理策略
+- [ ] 工作流编排（多步骤流程定义）
+- [ ] 错误处理策略（重试、回滚、降级）
 
-### Phase 8：AI 接口
+### Phase 8：AI 接口 🔄 部分完成
 - [x] `AIInterface` trait
-- [ ] 高层 API 设计
-- [ ] MCP Server 实现
+- [ ] 高层 API 设计（统一入口）
+- [ ] MCP Server 实现（完整协议）
 - [x] CLI 更新
 
 ---
 
-## Crate 结构（重构后）
+## Crate 结构
 
 ```
 devman/
@@ -129,13 +134,14 @@ devman/
 │   │   ├── phase.rs
 │   │   ├── task.rs
 │   │   ├── work_record.rs
+│   │   ├── event.rs
 │   │   ├── knowledge.rs
 │   │   ├── quality.rs
 │   │   └── lib.rs
 │   │
 │   ├── storage/                 # 存储层
-│   │   ├── trait.rs
-│   │   ├── git_json.rs
+│   │   ├── trait_.rs
+│   │   ├── json_storage.rs
 │   │   └── lib.rs
 │   │
 │   ├── knowledge/               # 知识服务 (Layer 5)
@@ -238,9 +244,55 @@ enum KnowledgeType {
 
 ---
 
+## 存储层说明（v3 更新）
+
+### JsonStorage 设计
+
+文件式 JSON 存储，不包含 Git 集成：
+
+```
+.devman/
+├── goals/           # 目标数据（JSON）
+├── projects/        # 项目数据（JSON）
+├── phases/          # 阶段数据（JSON）
+├── tasks/           # 任务数据（JSON）
+├── events/          # 事件数据（JSON）
+├── knowledge/       # 知识数据（JSON）
+├── quality/         # 质检数据（JSON）
+├── work_records/    # 工作记录（JSON）
+└── meta/            # 元数据版本标记
+    ├── goals/       # 每对象一个 .meta.json
+    ├── projects/
+    ├── phases/
+    ├── tasks/
+    ├── events/
+    ├── knowledge/
+    ├── quality/
+    └── work_records/
+```
+
+### 元数据格式
+
+每个对象的 `meta.json` 仅包含版本信息：
+
+```json
+{
+  "version": 5,
+  "updated_at": "2026-01-30T12:00:00Z"
+}
+```
+
+### 版本管理
+
+- **DevMan 存储**: 仅维护元数据版本标记
+- **完整快照**: 由项目自身的 Git 仓库管理
+- **Rollback**: `commit()` 和 `rollback()` 方法现为 no-op（仅清空 pending 状态）
+
+---
+
 ## 质检扩展机制
 
-### 通用质检（内置）
+### 通用质检（内置）✅
 - 编译检查
 - 测试检查（支持覆盖率）
 - 格式检查
@@ -249,7 +301,7 @@ enum KnowledgeType {
 - 类型检查
 - 安全扫描
 
-### 业务质检（用户扩展）
+### 业务质检（用户扩展）🔄
 ```rust
 struct CustomCheckSpec {
     name: String,
@@ -259,11 +311,15 @@ struct CustomCheckSpec {
 }
 ```
 
+**待完成**:
+- [ ] 增强输出解析（正则表达式、JsonPath）
+- [ ] 通知机制实现
+
 ### 人机协作流程
 ```
 1. 系统运行自动质检
 2. 发现需要人工判断的问题
-3. 发送通知（Slack/Email/Webhook）
+3. 发送通知（Slack/Email/Webhook）🔄 待实现
 4. 业务人员评审（填写表单）
 5. 系统记录结果，更新知识
 ```
@@ -294,36 +350,39 @@ struct CustomCheckSpec {
 
 ## 优先级（按依赖顺序）
 
-### P0 - 基础结构
-1. 核心数据模型（Goal, Project, Phase, Task, WorkRecord）
-2. 存储层更新
+### P0 - 基础结构 ✅
+1. 核心数据模型
+2. 存储层（JsonStorage）
 3. CLI 基础命令
 
-### P1 - 质量保证
-1. QualityEngine
-2. 通用质检实现
-3. 业务质检扩展机制
-4. 质检编排
+### P1 - 质量保证 ⚙️
+1. QualityEngine ✅
+2. 通用质检实现 ✅
+3. 业务质检扩展机制 🔄
+4. 质检编排 ✅
 
-### P2 - 知识服务
-1. 知识存储和检索
+### P2 - 知识服务 🔄
+1. 知识存储和检索 ✅
 2. 模板系统
-3. 相似度匹配
+3. 相似度匹配（可选）
 
-### P3 - 进度与工作管理
-1. ProgressTracker
-2. WorkManager
-3. 上下文管理
+### P3 - 进度与工作管理 🔄
+1. ProgressTracker ✅
+2. WorkManager ✅
+3. 上下文管理 ✅
+4. 阻塞检测
+5. 时间预估
 
-### P4 - 工具与 AI 接口
-1. Tool trait
-2. 内置工具
-3. AIInterface
-4. MCP Server
+### P4 - 工具与 AI 接口 ⚙️
+1. Tool trait ✅
+2. 内置工具 ✅
+3. AIInterface ✅
+4. MCP Server 🔄
+5. 工作流编排
 
 ---
 
-## 设计原则（更新）
+## 设计原则
 
 1. **质检可扩展** - 通用 + 业务 + 人机协作
 2. **知识可复用** - 检索、模板、推荐
@@ -332,6 +391,7 @@ struct CustomCheckSpec {
 5. **存储抽象** - 可替换存储后端
 6. **AI 友好** - 结构化接口
 7. **可追溯性** - 完整工作日志
+8. **轻量级** - 文件式存储，无外部依赖
 
 ---
 
@@ -348,18 +408,43 @@ struct CustomCheckSpec {
 
 ## 当前进度
 
+### 已完成 ✅
 - [x] 项目规格定义（v1）
 - [x] 设计方案 v2
 - [x] Rust 项目初始化
 - [x] 核心数据模型重构
-- [x] 存储层更新
-- [x] 质量保证实现
-- [x] 知识服务实现
-- [x] 进度追踪实现
-- [x] 工作管理实现
-- [x] 工具集成实现
-- [ ] AI 接口实现 (部分)
+- [x] 存储层实现（JsonStorage）
+- [x] 质量保证基础实现
+- [x] 知识服务基础实现
+- [x] 进度追踪基础实现
+- [x] 工作管理基础实现
+- [x] 工具集成基础实现
+- [x] AI 接口 trait 定义
+- [x] CLI 基础实现
+
+### 进行中 ⚙️
+- [ ] 质检输出解析增强
+- [ ] 通知机制实现
+- [ ] 知识模板系统
+- [ ] 工作流编排
+- [ ] MCP Server 完整实现
+
+### 计划中 📋
+- [ ] 知识相似度匹配（可选）
+- [ ] 阻塞自动检测
+- [ ] 时间预估算法
+- [ ] 更多质检检查器
+- [ ] 完善文档和示例
 
 ---
 
-*最后更新: 2026-01-29*
+## 图例
+
+- ✅ 已完成
+- 🔄 部分完成
+- ⚙️ 进行中
+- 📋 计划中
+
+---
+
+*最后更新: 2026-01-30 (v3 - 移除 Git 功能)*

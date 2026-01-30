@@ -1,6 +1,6 @@
 //! Storage abstraction and implementations for DevMan.
 //!
-//! This crate provides a trait-based storage interface with a Git+JSON
+//! This crate provides a trait-based storage interface with a file-based JSON
 //! reference implementation.
 
 #![warn(missing_docs)]

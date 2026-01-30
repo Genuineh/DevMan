@@ -1,4 +1,6 @@
-# DevMan 设计方案 v2
+# DevMan 设计方案 v3
+
+> **v3 变更说明**: 移除存储层的 Git 功能，使用纯文件式 JSON 存储。版本管理由项目自身的 Git 仓库负责。
 
 > AI 的认知工作管理系统 - 外部大脑 + 项目经理 + 质检员
 
@@ -46,7 +48,7 @@ Layer 2: Work Management       (工作执行)
 └── 变更追踪
 
 Layer 1: Storage & State       (存储与状态）
-├── Git+JSON 存储
+├── 文件式 JSON 存储
 ├── 状态机
 ├── 事务管理
 └── 缓存层
@@ -1168,7 +1170,7 @@ enum QualityOverallStatus {
 
 ---
 
-## Crate 结构（重新设计）
+## Crate 结构（v3 更新：移除 Git 存储）
 
 ```
 devman/
@@ -1184,8 +1186,8 @@ devman/
 │   │   └── quality
 │   │
 │   ├── storage/                 # 存储层
-│   │   ├── trait
-│   │   └── git_json
+│   │   ├── trait_.rs
+│   │   └── json_storage.rs
 │   │
 │   ├── knowledge/               # 知识服务（Layer 5）
 │   │   ├── service
@@ -1239,9 +1241,10 @@ devman/
 - Knowledge 基础结构
 
 ### Phase 2：存储与基础服务
-- Storage trait + GitJSON 实现
+- Storage trait + JsonStorage 实现（文件式 JSON）
 - 基础 CRUD
 - 事务支持
+- 元数据版本标记（meta.json）
 
 ### Phase 3：质量保证
 - 通用质检（编译、测试）
