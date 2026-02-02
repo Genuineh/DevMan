@@ -422,9 +422,9 @@ struct CustomCheckSpec {
 ## 文档计划
 
 - [x] DESIGN.md - 完整设计方案
-- [ ] API.md - API 参考
-- [ ] QUALITY_GUIDE.md - 质检扩展指南
-- [ ] KNOWLEDGE.md - 知识管理指南
+- [x] API.md - API 参考
+- [x] QUALITY_GUIDE.md - 质检扩展指南
+- [x] KNOWLEDGE.md - 知识管理指南
 - [ ] ARCHITECTURE.md - 架构详解
 - [ ] CONTRIBUTING.md - 贡献指南
 
@@ -458,14 +458,18 @@ struct CustomCheckSpec {
   - [x] 新增质检引擎测试用例（18个新增测试）
   - [x] 修复文档缺失警告（id.rs, project.rs）
   - [x] 移除 dead_code（knowledge.rs 未使用的 NodeId）
+- [x] 文档完善
+  - [x] API.md - 完整 API 参考手册（核心类型、质检、知识、进度、工作、工具）
+  - [x] QUALITY_GUIDE.md - 质检扩展指南（内置检查器、自定义检查器、配置示例）
+  - [x] KNOWLEDGE.md - 知识管理指南（知识类型、检索、模板、分类）
 
 ### 进行中 ⚙️
-- [ ] 完善文档和示例
+- [ ] ARCHITECTURE.md - 架构详解
+- [ ] CONTRIBUTING.md - 贡献指南
 
 ### 计划中 📋
-- [ ] 完善文档和示例
-- [ ] API.md - API 参考
-- [ ] QUALITY_GUIDE.md - 质检扩展指南
+- [ ] ARCHITECTURE.md - 架构详解
+- [ ] CONTRIBUTING.md - 贡献指南
 
 ---
 
@@ -478,4 +482,4 @@ struct CustomCheckSpec {
 
 ---
 
-*最后更新: 2026-02-02 (质检检查器增强完成 - 新增4个检查器实现 + 18个测试)*
+*最后更新: 2026-02-02 (文档完善完成 - 新增 API.md, QUALITY_GUIDE.md, KNOWLEDGE.md)*
