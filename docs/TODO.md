@@ -117,7 +117,7 @@ Layer 1: Storage & State       (存储与状态)
 - [x] 工作流编排（多步骤流程定义）
 - [x] 错误处理策略（重试、回滚、降级）
 
-### Phase 8：AI 接口 ⚙️ 部分完成
+### Phase 8：AI 接口 ✅ 完成
 - [x] `AIInterface` trait
 - [x] 交互式任务管理系统
   - [x] 任务状态机实现（10状态 + AbandonReason）
@@ -129,12 +129,13 @@ Layer 1: Storage & State       (存储与状态)
   - [x] 放弃任务（统一处理）（InteractiveAI trait 已定义）
   - [x] 需求变更处理（InteractiveAI trait 已定义）
   - [x] 任务重新分配（InteractiveAI trait 已定义）
-- [ ] MCP Server 实现（部分完成）
-  - [ ] MCP Tool 注册
-  - [ ] MCP Resources
-  - [ ] stdio 传输
+- [x] MCP Server 实现
+  - [x] MCP Tool 注册（11个内置工具）
+  - [x] MCP Resources（4个内置资源）
+  - [x] stdio 传输
+  - [x] Unix socket 传输
 - [x] CLI 更新
-- [x] AI 模块测试（52个测试用例）
+- [x] AI 模块测试（59个测试用例）
 
 ---
 
@@ -440,16 +441,13 @@ struct CustomCheckSpec {
 - [x] 工具集成基础实现
 - [x] AI 接口 trait 定义
 - [x] CLI 基础实现
-- [x] AI 模块测试（52个测试用例）
+- [x] AI 模块测试（59个测试用例）
+- [x] MCP Server 实现
 
 ### 进行中 ⚙️
-- [ ] MCP Server 完整实现
-  - [ ] MCP Tool 注册
-  - [ ] MCP Resources
-  - [ ] stdio 传输
+- [ ] 知识分类增强（可选，需要向量库）
 
 ### 计划中 📋
-- [ ] 知识分类增强（可选，需要向量库）
 - [ ] 阻塞自动检测
 - [ ] 时间预估算法
 - [ ] 更多质检检查器
@@ -466,4 +464,4 @@ struct CustomCheckSpec {
 
 ---
 
-*最后更新: 2026-02-02 (Phase 8 AI 接口测试完成)*
+*最后更新: 2026-02-02 (Phase 8 AI 接口完成 - MCP Server实现)*
