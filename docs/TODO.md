@@ -462,14 +462,15 @@ struct CustomCheckSpec {
   - [x] API.md - 完整 API 参考手册（核心类型、质检、知识、进度、工作、工具）
   - [x] QUALITY_GUIDE.md - 质检扩展指南（内置检查器、自定义检查器、配置示例）
   - [x] KNOWLEDGE.md - 知识管理指南（知识类型、检索、模板、分类）
+  - [x] ARCHITECTURE.md - 架构详解（五层模型、数据流、扩展点）
+  - [x] CONTRIBUTING.md - 贡献指南（开发流程、提交规范、PR 流程）
 
 ### 进行中 ⚙️
-- [ ] ARCHITECTURE.md - 架构详解
-- [ ] CONTRIBUTING.md - 贡献指南
+- [ ] 无
 
 ### 计划中 📋
-- [ ] ARCHITECTURE.md - 架构详解
-- [ ] CONTRIBUTING.md - 贡献指南
+- [ ] 根据用户反馈完善现有文档
+- [ ] 添加更多代码示例和使用场景
 
 ---
 
@@ -482,4 +483,4 @@ struct CustomCheckSpec {
 
 ---
 
-*最后更新: 2026-02-02 (文档完善完成 - 新增 API.md, QUALITY_GUIDE.md, KNOWLEDGE.md)*
+*最后更新: 2026-02-02 (全部文档完成 - ARCHITECTURE.md + CONTRIBUTING.md)*
