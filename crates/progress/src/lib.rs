@@ -9,5 +9,7 @@ pub mod blocker;
 pub mod estimator;
 
 pub use tracker::{ProgressTracker, ProgressSnapshot};
-pub use blocker::BlockerDetector;
+pub use blocker::{
+    BlockerDetector, BlockerAnalysis, BlockerStats, ResolutionSuggestion, ResolutionAction,
+};
 pub use estimator::CompletionEstimator;

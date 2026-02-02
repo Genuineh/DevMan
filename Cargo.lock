@@ -274,12 +274,14 @@ dependencies = [
 name = "devman-knowledge"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "chrono",
  "devman-core",
  "devman-storage",
  "regex",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",

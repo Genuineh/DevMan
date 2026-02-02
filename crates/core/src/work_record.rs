@@ -188,7 +188,7 @@ pub enum ResolutionType {
 }
 
 /// Severity level.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Severity {
     Info,
     Warning,
