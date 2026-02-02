@@ -612,3 +612,399 @@ impl InteractiveAI for BasicInteractiveAI {
         Err(anyhow::anyhow!("Not implemented"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    // ==================== Type Tests ====================
+
+    #[test]
+    fn test_create_task_request_default() {
+        let request = CreateTaskRequest {
+            title: "Test Task".to_string(),
+            description: "Test Description".to_string(),
+            goal_id: None,
+            phase_id: None,
+            estimated_duration: None,
+            dependencies: vec![],
+        };
+        assert_eq!(request.title, "Test Task");
+        assert!(request.dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_task_guidance_structure() {
+        let guidance = TaskGuidance {
+            current_state: TaskState::Created {
+                created_at: Utc::now(),
+                created_by: "test".to_string(),
+            },
+            next_action: NextAction::ReadContext,
+            prerequisites_satisfied: true,
+            missing_prerequisites: vec![],
+            allowed_operations: vec!["read_task_context".to_string()],
+            guidance_message: "Test guidance".to_string(),
+            task_health: TaskHealth::Healthy,
+        };
+
+        assert!(guidance.prerequisites_satisfied);
+        assert!(guidance.allowed_operations.contains(&"read_task_context".to_string()));
+    }
+
+    #[test]
+    fn test_task_health_variants() {
+        let healthy = TaskHealth::Healthy;
+        let warning = TaskHealth::Warning {
+            warnings: vec!["Warning 1".to_string()],
+        };
+        let attention = TaskHealth::Attention {
+            issues: vec![TaskIssue {
+                severity: IssueSeverity::Medium,
+                description: "Test issue".to_string(),
+                suggested_action: "Fix it".to_string(),
+            }],
+        };
+        let critical = TaskHealth::Critical {
+            blockers: vec!["Blocker 1".to_string()],
+        };
+
+        assert!(matches!(healthy, TaskHealth::Healthy));
+        assert!(matches!(warning, TaskHealth::Warning { .. }));
+        assert!(matches!(attention, TaskHealth::Attention { .. }));
+        assert!(matches!(critical, TaskHealth::Critical { .. }));
+    }
+
+    #[test]
+    fn test_issue_severity_ordering() {
+        assert_eq!(IssueSeverity::Low as u8, 0);
+        assert_eq!(IssueSeverity::Medium as u8, 1);
+        assert_eq!(IssueSeverity::High as u8, 2);
+        assert_eq!(IssueSeverity::Critical as u8, 3);
+    }
+
+    #[test]
+    fn test_next_action_variants() {
+        let actions = vec![
+            NextAction::ReadContext,
+            NextAction::ReviewKnowledge {
+                suggested_queries: vec!["query1".to_string()],
+            },
+            NextAction::StartExecution {
+                suggested_workflow: Some("tdd".to_string()),
+            },
+            NextAction::ContinueExecution {
+                required_logs: vec!["log1".to_string()],
+            },
+            NextAction::SubmitWork,
+            NextAction::RunQualityCheck {
+                required_checks: vec![],
+            },
+            NextAction::FixQualityIssues {
+                issues: vec!["issue1".to_string()],
+            },
+            NextAction::CompleteTask,
+            NextAction::TaskFinished,
+        ];
+
+        assert_eq!(actions.len(), 9);
+    }
+
+    #[test]
+    fn test_task_filter_default() {
+        let filter = TaskFilter::default();
+        assert!(filter.states.is_none());
+        assert!(filter.limit.is_none());
+    }
+
+    // ==================== Knowledge Review Tests ====================
+
+    #[test]
+    fn test_knowledge_review_result() {
+        let result = KnowledgeReviewResult {
+            knowledge_items: vec![],
+            required_reading: vec![],
+            reviewed_knowledge_ids: vec![],
+        };
+
+        assert!(result.knowledge_items.is_empty());
+    }
+
+    #[test]
+    fn test_knowledge_item() {
+        let item = KnowledgeItem {
+            id: KnowledgeId::new(),
+            title: "Test Knowledge".to_string(),
+            knowledge_type: "best_practice".to_string(),
+            summary: "Summary".to_string(),
+            detail: "Detail".to_string(),
+            relevance_score: 0.95,
+        };
+
+        assert!(item.relevance_score > 0.0 && item.relevance_score <= 1.0);
+    }
+
+    // ==================== Execution Session Tests ====================
+
+    #[test]
+    fn test_execution_session() {
+        let session = ExecutionSession {
+            session_id: "session_123".to_string(),
+            started_at: Utc::now(),
+            timeout: Some(std::time::Duration::from_secs(3600)),
+        };
+
+        assert_eq!(session.session_id, "session_123");
+        assert!(session.timeout.is_some());
+    }
+
+    // ==================== Work Log Tests ====================
+
+    #[test]
+    fn test_work_log_entry() {
+        let entry = WorkLogEntry {
+            timestamp: Utc::now(),
+            action: WorkAction::Created,
+            description: "Created new file".to_string(),
+            files: vec!["src/main.rs".to_string()],
+            command_output: None,
+        };
+
+        assert!(matches!(entry.action, WorkAction::Created));
+        assert!(entry.files.contains(&"src/main.rs".to_string()));
+    }
+
+    #[test]
+    fn test_work_action_variants() {
+        let actions = vec![
+            WorkAction::Created,
+            WorkAction::Modified,
+            WorkAction::Tested,
+            WorkAction::Documented,
+            WorkAction::Debugged,
+            WorkAction::Refactored,
+        ];
+
+        assert_eq!(actions.len(), 6);
+    }
+
+    #[test]
+    fn test_command_execution() {
+        let exec = CommandExecution {
+            command: "cargo".to_string(),
+            args: vec!["test".to_string(), "--".to_string(), "--nocapture".to_string()],
+            exit_code: 0,
+            output: "All tests passed".to_string(),
+            timestamp: Utc::now(),
+        };
+
+        assert_eq!(exec.exit_code, 0);
+        assert!(exec.output.contains("passed"));
+    }
+
+    #[test]
+    fn test_work_submission() {
+        let submission = WorkSubmission {
+            description: "Implemented feature X".to_string(),
+            artifacts: vec![Artifact {
+                name: "feature_x.rs".to_string(),
+                artifact_type: ArtifactType::Code,
+                path: Some("src/feature_x.rs".to_string()),
+                content: None,
+            }],
+            commands_executed: vec![],
+            lessons_learned: Some("Learned about Y".to_string()),
+        };
+
+        assert!(submission.lessons_learned.is_some());
+        assert!(matches!(submission.artifacts[0].artifact_type, ArtifactType::Code));
+    }
+
+    #[test]
+    fn test_artifact_type_variants() {
+        let types = vec![
+            ArtifactType::File,
+            ArtifactType::Code,
+            ArtifactType::Documentation,
+            ArtifactType::Test,
+            ArtifactType::Binary,
+            ArtifactType::Other,
+        ];
+
+        assert_eq!(types.len(), 6);
+    }
+
+    // ==================== Quality Decision Tests ====================
+
+    #[test]
+    fn test_quality_decision_variants() {
+        let decisions = vec![
+            QualityDecision::AcceptAndComplete,
+            QualityDecision::FixIssuesAndContinue,
+            QualityDecision::RedoExecution,
+        ];
+
+        assert_eq!(decisions.len(), 3);
+    }
+
+    // ==================== Abandon Result Tests ====================
+
+    #[test]
+    fn test_abandon_result() {
+        let result = AbandonResult {
+            success: true,
+            can_be_reassigned: true,
+            work_reusable: true,
+            suggestions_for_next: vec!["Try a different approach".to_string()],
+            new_state: TaskState::Abandoned {
+                abandoned_at: Utc::now(),
+                reason: AbandonReason::Other {
+                    reason: "Out of scope".to_string(),
+                    details: None,
+                },
+            },
+        };
+
+        assert!(result.success);
+        assert!(result.can_be_reassigned);
+        assert!(result.work_reusable);
+    }
+
+    // ==================== Requirement Change Tests ====================
+
+    #[test]
+    fn test_requirement_change_type_variants() {
+        let types = vec![
+            RequirementChangeType::FeatureChange,
+            RequirementChangeType::PriorityChange,
+            RequirementChangeType::DeadlineChange,
+            RequirementChangeType::DependencyChange,
+            RequirementChangeType::QualityRequirementChange,
+        ];
+
+        assert_eq!(types.len(), 5);
+    }
+
+    #[test]
+    fn test_change_handling_result_variants() {
+        let results = vec![
+            ChangeHandlingResult::CanContinue,
+            ChangeHandlingResult::NeedsReview {
+                suggested_knowledge: vec!["doc1".to_string()],
+            },
+            ChangeHandlingResult::NeedsReexecution {
+                affected_work: vec!["work1".to_string()],
+            },
+            ChangeHandlingResult::RecommendNewTask {
+                reason: "Major refactor needed".to_string(),
+                reusable_content: vec!["content1".to_string()],
+            },
+        ];
+
+        assert_eq!(results.len(), 4);
+    }
+
+    // ==================== Reassignment Tests ====================
+
+    #[test]
+    fn test_reassignment_request() {
+        let request = ReassignmentRequest {
+            id: ReassignmentRequestId("req_001".to_string()),
+            task_id: TaskId::new(),
+            requested_by: "ai_assistant".to_string(),
+            reason: "Specialized expertise needed".to_string(),
+            created_at: Utc::now(),
+            status: ReassignmentStatus::PendingApproval,
+        };
+
+        assert!(matches!(request.status, ReassignmentStatus::PendingApproval));
+    }
+
+    #[test]
+    fn test_reassignment_request_id() {
+        let id1 = ReassignmentRequestId("req_001".to_string());
+        let id2 = ReassignmentRequestId("req_001".to_string());
+        let id3 = ReassignmentRequestId("req_002".to_string());
+
+        assert_eq!(id1, id2);
+        assert_ne!(id1, id3);
+    }
+
+    #[test]
+    fn test_reassignment_status_variants() {
+        let statuses = vec![
+            ReassignmentStatus::PendingApproval,
+            ReassignmentStatus::AwaitingAcceptance,
+            ReassignmentStatus::Accepted {
+                accepted_by: "human".to_string(),
+                accepted_at: Utc::now(),
+            },
+            ReassignmentStatus::Rejected {
+                reason: "Not approved".to_string(),
+            },
+        ];
+
+        assert_eq!(statuses.len(), 4);
+    }
+
+    // ==================== Task Completion Summary Tests ====================
+
+    #[test]
+    fn test_task_completion_summary() {
+        let summary = TaskCompletionSummary {
+            summary: "Completed feature X".to_string(),
+            artifacts: vec![Artifact {
+                name: "feature_x.rs".to_string(),
+                artifact_type: ArtifactType::Code,
+                path: None,
+                content: Some("fn main() {}".to_string()),
+            }],
+            lessons_learned: Some("Use trait objects for polymorphism".to_string()),
+            created_knowledge: Some(vec![KnowledgeId::new()]),
+        };
+
+        assert!(summary.lessons_learned.is_some());
+        assert!(summary.created_knowledge.is_some());
+    }
+
+    // ==================== ID Generation Tests ====================
+
+    #[test]
+    fn test_task_id_generation() {
+        let id1 = TaskId::new();
+        let id2 = TaskId::new();
+        // Each call should generate a unique ID
+        assert_ne!(id1.to_string(), id2.to_string());
+        // ID should not be empty
+        assert!(!id1.to_string().is_empty());
+    }
+
+    #[test]
+    fn test_quality_check_id_generation() {
+        let id1 = QualityCheckId::new();
+        let id2 = QualityCheckId::new();
+        assert_ne!(id1.to_string(), id2.to_string());
+    }
+
+    #[test]
+    fn test_knowledge_id_generation() {
+        let id1 = KnowledgeId::new();
+        let id2 = KnowledgeId::new();
+        assert_ne!(id1.to_string(), id2.to_string());
+    }
+
+    #[test]
+    fn test_goal_id_generation() {
+        let id1 = GoalId::new();
+        let id2 = GoalId::new();
+        assert_ne!(id1.to_string(), id2.to_string());
+    }
+
+    #[test]
+    fn test_phase_id_generation() {
+        let id1 = PhaseId::new();
+        let id2 = PhaseId::new();
+        assert_ne!(id1.to_string(), id2.to_string());
+    }
+}

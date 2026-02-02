@@ -187,3 +187,145 @@ impl AIInterface for BasicAIInterface {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use devman_core::{GoalId, GoalStatus, PhaseStatus, QualityCheckType, GenericCheckType};
+    use std::collections::HashMap;
+
+    // ==================== QualityCheckType Tests ====================
+
+    #[test]
+    fn test_quality_check_type_generic_compiles() {
+        let check_type = QualityCheckType::Generic(GenericCheckType::Compiles {
+            target: "x86_64-unknown-linux-gnu".to_string(),
+        });
+        assert!(matches!(check_type, QualityCheckType::Generic(..)));
+    }
+
+    #[test]
+    fn test_quality_check_type_generic_tests() {
+        let check_type = QualityCheckType::Generic(GenericCheckType::TestsPass {
+            test_suite: "integration".to_string(),
+            min_coverage: Some(80.0),
+        });
+        assert!(matches!(check_type, QualityCheckType::Generic(..)));
+    }
+
+    #[test]
+    fn test_quality_check_type_generic_lints() {
+        let check_type = QualityCheckType::Generic(GenericCheckType::LintsPass {
+            linter: "clippy".to_string(),
+        });
+        assert!(matches!(check_type, QualityCheckType::Generic(..)));
+    }
+
+    // ==================== Goal Tests ====================
+
+    #[test]
+    fn test_goal_id_generation() {
+        let id1 = GoalId::new();
+        let id2 = GoalId::new();
+        assert_ne!(id1.to_string(), id2.to_string());
+        assert!(!id1.to_string().is_empty());
+    }
+
+    #[test]
+    fn test_goal_status_variants() {
+        let statuses = vec![
+            GoalStatus::Active,
+            GoalStatus::Completed,
+            GoalStatus::Paused,
+            GoalStatus::Cancelled,
+        ];
+        assert_eq!(statuses.len(), 4);
+    }
+
+    // ==================== Phase Tests ====================
+
+    #[test]
+    fn test_phase_id_generation() {
+        let id1 = PhaseId::new();
+        let id2 = PhaseId::new();
+        assert_ne!(id1.to_string(), id2.to_string());
+    }
+
+    #[test]
+    fn test_phase_status_variants() {
+        let statuses = vec![
+            PhaseStatus::NotStarted,
+            PhaseStatus::InProgress,
+            PhaseStatus::Completed,
+            PhaseStatus::Blocked,
+        ];
+        assert_eq!(statuses.len(), 4);
+    }
+
+    // ==================== Task Tests ====================
+
+    #[test]
+    fn test_task_id_generation() {
+        let id1 = TaskId::new();
+        let id2 = TaskId::new();
+        assert_ne!(id1.to_string(), id2.to_string());
+        assert!(!id1.to_string().is_empty());
+    }
+
+    // ==================== ToolInput Tests ====================
+
+    #[test]
+    fn test_tool_input_structure() {
+        let input = ToolInput {
+            args: vec!["test".to_string(), "--".to_string(), "--nocapture".to_string()],
+            env: {
+                let mut env = HashMap::new();
+                env.insert("RUST_LOG".to_string(), "debug".to_string());
+                env
+            },
+            stdin: None,
+            timeout: Some(std::time::Duration::from_secs(300)),
+        };
+        assert_eq!(input.args.len(), 3);
+        assert!(input.timeout.is_some());
+        assert_eq!(input.env.get("RUST_LOG"), Some(&"debug".to_string()));
+    }
+
+    #[test]
+    fn test_tool_input_with_stdin() {
+        let input = ToolInput {
+            args: vec!["-la".to_string()],
+            env: HashMap::new(),
+            stdin: Some("input data".to_string()),
+            timeout: None,
+        };
+        assert!(input.stdin.is_some());
+        assert_eq!(input.stdin, Some("input data".to_string()));
+    }
+
+    // ==================== Knowledge Tests ====================
+
+    #[test]
+    fn test_knowledge_type_variants() {
+        use devman_core::KnowledgeType;
+
+        // KnowledgeType is an enum with struct variants
+        let _ = KnowledgeType::LessonLearned {
+            lesson: "Test lesson".to_string(),
+            context: "Test context".to_string(),
+        };
+        let _ = KnowledgeType::BestPractice {
+            practice: "Best practice".to_string(),
+            rationale: "Rationale".to_string(),
+        };
+    }
+
+    // ==================== QualityCheckId Tests ====================
+
+    #[test]
+    fn test_quality_check_id_generation() {
+        let id1 = QualityCheckId::new();
+        let id2 = QualityCheckId::new();
+        assert_ne!(id1.to_string(), id2.to_string());
+    }
+}
