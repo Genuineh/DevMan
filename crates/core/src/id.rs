@@ -10,6 +10,7 @@ use ulid::Ulid;
 pub struct GoalId(pub Ulid);
 
 impl GoalId {
+    /// Create a new unique goal ID.
     pub fn new() -> Self {
         Self(Ulid::new())
     }
@@ -39,6 +40,7 @@ impl std::str::FromStr for GoalId {
 pub struct ProjectId(pub Ulid);
 
 impl ProjectId {
+    /// Create a new unique project ID.
     pub fn new() -> Self {
         Self(Ulid::new())
     }
@@ -61,6 +63,7 @@ impl std::fmt::Display for ProjectId {
 pub struct PhaseId(pub Ulid);
 
 impl PhaseId {
+    /// Create a new unique phase ID.
     pub fn new() -> Self {
         Self(Ulid::new())
     }
@@ -83,6 +86,7 @@ impl std::fmt::Display for PhaseId {
 pub struct TaskId(pub Ulid);
 
 impl TaskId {
+    /// Create a new unique task ID.
     pub fn new() -> Self {
         Self(Ulid::new())
     }
@@ -112,6 +116,7 @@ impl std::str::FromStr for TaskId {
 pub struct EventId(pub Ulid);
 
 impl EventId {
+    /// Create a new unique event ID.
     pub fn new() -> Self {
         Self(Ulid::new())
     }
@@ -134,6 +139,7 @@ impl std::fmt::Display for EventId {
 pub struct WorkRecordId(pub Ulid);
 
 impl WorkRecordId {
+    /// Create a new unique work record ID.
     pub fn new() -> Self {
         Self(Ulid::new())
     }
@@ -156,6 +162,7 @@ impl std::fmt::Display for WorkRecordId {
 pub struct KnowledgeId(pub Ulid);
 
 impl KnowledgeId {
+    /// Create a new unique knowledge ID.
     pub fn new() -> Self {
         Self(Ulid::new())
     }
@@ -178,6 +185,7 @@ impl std::fmt::Display for KnowledgeId {
 pub struct QualityCheckId(pub Ulid);
 
 impl QualityCheckId {
+    /// Create a new unique quality check ID.
     pub fn new() -> Self {
         Self(Ulid::new())
     }
@@ -200,6 +208,7 @@ impl std::fmt::Display for QualityCheckId {
 pub struct BlockerId(pub Ulid);
 
 impl BlockerId {
+    /// Create a new unique blocker ID.
     pub fn new() -> Self {
         Self(Ulid::new())
     }
@@ -216,6 +225,7 @@ impl Default for BlockerId {
 pub struct IssueId(pub Ulid);
 
 impl IssueId {
+    /// Create a new unique issue ID.
     pub fn new() -> Self {
         Self(Ulid::new())
     }
@@ -232,6 +242,7 @@ impl Default for IssueId {
 pub struct CriterionId(pub Ulid);
 
 impl CriterionId {
+    /// Create a new unique criterion ID.
     pub fn new() -> Self {
         Self(Ulid::new())
     }
@@ -248,6 +259,7 @@ impl Default for CriterionId {
 pub struct QualityProfileId(pub Ulid);
 
 impl QualityProfileId {
+    /// Create a new unique quality profile ID.
     pub fn new() -> Self {
         Self(Ulid::new())
     }

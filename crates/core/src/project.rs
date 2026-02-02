@@ -74,23 +74,33 @@ pub struct ToolConfig {
 /// Build tools.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BuildTool {
+    /// Rust cargo
     Cargo,
+    /// Node.js npm
     Npm,
+    /// Node.js yarn
     Yarn,
+    /// Make build system
     Make,
+    /// Gradle build system
     Gradle,
+    /// Maven build system
     Maven,
 }
 
 /// Test frameworks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TestFramework {
+    /// Rust testing framework
     #[serde(rename = "rust")]
     Rust,
+    /// JavaScript/TypeScript Jest
     #[serde(rename = "jest")]
     Jest,
+    /// Python pytest
     #[serde(rename = "pytest")]
     Pytest,
+    /// Go testing
     #[serde(rename = "gotest")]
     GoTest,
 }

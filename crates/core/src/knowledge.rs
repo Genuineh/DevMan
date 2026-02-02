@@ -176,6 +176,5 @@ pub struct Feedback {
     pub from: String,
 }
 
-// Export type aliases for compatibility
-pub type NodeId = KnowledgeId;
+// Export type alias for compatibility
 pub type KnowledgeUpdate = ();

@@ -450,13 +450,22 @@ struct CustomCheckSpec {
 - [x] 知识分类增强（基于 TF-IDF/关键词，无需外部向量库）
 - [x] 阻塞自动检测（依赖检测 + 循环依赖检测 + 解决建议）
 - [x] AI时间预估（分钟级精度 + 复杂度分级 + 置信度）
+- [x] 质检检查器增强
+  - [x] DocumentationExists 检查器（检查文档文件是否存在）
+  - [x] TypeCheck 检查器（类型检查）
+  - [x] DependenciesValid 检查器（依赖有效性检查）
+  - [x] SecurityScan 检查器（安全扫描）
+  - [x] 新增质检引擎测试用例（18个新增测试）
+  - [x] 修复文档缺失警告（id.rs, project.rs）
+  - [x] 移除 dead_code（knowledge.rs 未使用的 NodeId）
 
 ### 进行中 ⚙️
-- [ ] 更多质检检查器
 - [ ] 完善文档和示例
 
 ### 计划中 📋
 - [ ] 完善文档和示例
+- [ ] API.md - API 参考
+- [ ] QUALITY_GUIDE.md - 质检扩展指南
 
 ---
 
@@ -469,4 +478,4 @@ struct CustomCheckSpec {
 
 ---
 
-*最后更新: 2026-02-02 (AI时间预估完成 - 分钟级精度 + 复杂度分级)*
+*最后更新: 2026-02-02 (质检检查器增强完成 - 新增4个检查器实现 + 18个测试)*

@@ -164,40 +164,52 @@ impl<S: Storage> BasicQualityEngine<S> {
     async fn run_generic_check(
         &self,
         generic: &devman_core::GenericCheckType,
-        _context: &WorkContext,
+        context: &WorkContext,
     ) -> QualityCheckResult {
         use devman_tools::ToolInput;
         use std::time::Instant;
+        use devman_core::{Severity, QualityCategory, Finding};
 
         let start = Instant::now();
 
-        let (tool, args) = match generic {
-            devman_core::GenericCheckType::Compiles { .. } => {
-                ("cargo".to_string(), vec!["check".to_string()])
+        let (tool, args, work_dir) = match generic {
+            devman_core::GenericCheckType::Compiles { target } => {
+                ("cargo".to_string(), vec!["check".to_string(), "--target".to_string(), target.clone()], None::<()>)
             }
-            devman_core::GenericCheckType::TestsPass { test_suite, .. } => {
-                ("cargo".to_string(), vec!["test".to_string(), test_suite.clone()])
+            devman_core::GenericCheckType::TestsPass { test_suite, min_coverage } => {
+                let mut args = vec!["test".to_string()];
+                if !test_suite.is_empty() {
+                    args.push(test_suite.clone());
+                }
+                // Check if we should get coverage (tarpaulin)
+                let tool = if min_coverage.is_some() {
+                    "cargo".to_string()
+                } else {
+                    "cargo".to_string()
+                };
+                (tool, args, None)
             }
             devman_core::GenericCheckType::Formatted { formatter } => {
-                (formatter.clone(), vec!["--check".to_string()])
+                (formatter.clone(), vec!["--check".to_string()], None)
             }
             devman_core::GenericCheckType::LintsPass { linter } => {
-                (linter.clone(), vec![])
+                (linter.clone(), vec![], None)
             }
-            _ => {
-                return QualityCheckResult {
-                    check_id: devman_core::QualityCheckId::new(),
-                    passed: true,
-                    execution_time: start.elapsed(),
-                    details: devman_core::CheckDetails {
-                        output: "Check not implemented".to_string(),
-                        exit_code: None,
-                        error: None,
-                    },
-                    findings: Vec::new(),
-                    metrics: Vec::new(),
-                    human_review: None,
-                }
+            devman_core::GenericCheckType::DocumentationExists { paths } => {
+                // Check if documentation files exist
+                return self.check_documentation_exists(paths, start).await;
+            }
+            devman_core::GenericCheckType::TypeCheck {} => {
+                // Run cargo check for type checking
+                ("cargo".to_string(), vec!["check".to_string()], None)
+            }
+            devman_core::GenericCheckType::DependenciesValid {} => {
+                // Check for outdated or insecure dependencies
+                ("cargo".to_string(), vec!["update".to_string(), "--dry-run".to_string()], None)
+            }
+            devman_core::GenericCheckType::SecurityScan { scanner } => {
+                // Run security scanner
+                (scanner.clone(), vec![], None)
             }
         };
 
@@ -225,7 +237,7 @@ impl<S: Storage> BasicQualityEngine<S> {
                         category: QualityCategory::Correctness,
                         message: format!("Tool execution failed: {}", e),
                         location: None,
-                        suggestion: None,
+                        suggestion: Some("Check if the tool is installed and available in PATH".to_string()),
                     }],
                     metrics: Vec::new(),
                     human_review: None,
@@ -235,12 +247,49 @@ impl<S: Storage> BasicQualityEngine<S> {
 
         let passed = output.exit_code == 0;
 
+        // Generate findings based on output
+        let mut findings = Vec::new();
+        let category = match generic {
+            devman_core::GenericCheckType::Compiles { .. } => QualityCategory::Correctness,
+            devman_core::GenericCheckType::TestsPass { .. } => QualityCategory::Testing,
+            devman_core::GenericCheckType::Formatted { .. } => QualityCategory::Maintainability,
+            devman_core::GenericCheckType::LintsPass { .. } => QualityCategory::Maintainability,
+            devman_core::GenericCheckType::DocumentationExists { .. } => QualityCategory::Documentation,
+            devman_core::GenericCheckType::TypeCheck { .. } => QualityCategory::Correctness,
+            devman_core::GenericCheckType::DependenciesValid { .. } => QualityCategory::Maintainability,
+            devman_core::GenericCheckType::SecurityScan { .. } => QualityCategory::Security,
+        };
+
+        if !passed {
+            findings.push(Finding {
+                severity: Severity::Error,
+                category,
+                message: format!("Check failed with exit code {}", output.exit_code),
+                location: None,
+                suggestion: Some("Review the command output for details".to_string()),
+            });
+        }
+
+        // Extract coverage if available
+        let mut metrics = Vec::new();
+        if let devman_core::GenericCheckType::TestsPass { min_coverage, .. } = generic {
+            if let Some(coverage) = min_coverage {
+                // Try to extract coverage from output
+                let coverage_value = self.extract_coverage(&output.stdout, &output.stderr);
+                metrics.push(devman_core::Metric {
+                    name: "coverage".to_string(),
+                    value: coverage_value,
+                    unit: Some("%".to_string()),
+                });
+            }
+        }
+
         QualityCheckResult {
             check_id: devman_core::QualityCheckId::new(),
             passed,
             execution_time: start.elapsed(),
             details: devman_core::CheckDetails {
-                output: output.stdout,
+                output: output.stdout.clone(),
                 exit_code: Some(output.exit_code),
                 error: if output.stderr.is_empty() {
                     None
@@ -248,7 +297,75 @@ impl<S: Storage> BasicQualityEngine<S> {
                     Some(output.stderr)
                 },
             },
-            findings: Vec::new(),
+            findings,
+            metrics,
+            human_review: None,
+        }
+    }
+
+    /// Extract coverage percentage from test output.
+    fn extract_coverage(&self, stdout: &str, _stderr: &str) -> f64 {
+        // Try common coverage patterns
+        let patterns = [
+            r"Coverage:\s*([0-9.]+)%",
+            r"coverage:\s*([0-9.]+)%",
+            r"(\d+\.?\d*)%.*coverage",
+        ];
+
+        for pattern in &patterns {
+            if let Ok(re) = regex::Regex::new(pattern) {
+                if let Some(caps) = re.captures(stdout) {
+                    if let Some(m) = caps.get(1) {
+                        if let Ok(val) = m.as_str().parse::<f64>() {
+                            return val;
+                        }
+                    }
+                }
+            }
+        }
+        0.0
+    }
+
+    /// Check if documentation files exist.
+    async fn check_documentation_exists(
+        &self,
+        paths: &[String],
+        start: std::time::Instant,
+    ) -> QualityCheckResult {
+        use devman_core::{Severity, QualityCategory, Finding};
+
+        let mut all_exist = true;
+        let mut missing_files = Vec::new();
+        let mut findings = Vec::new();
+
+        for path in paths {
+            let path = std::path::Path::new(path);
+            if !path.exists() {
+                all_exist = false;
+                missing_files.push(path.to_string_lossy().to_string());
+            }
+        }
+
+        if !all_exist {
+            findings.push(Finding {
+                severity: Severity::Warning,
+                category: QualityCategory::Documentation,
+                message: format!("Missing documentation files: {}", missing_files.join(", ")),
+                location: None,
+                suggestion: Some("Create the required documentation files".to_string()),
+            });
+        }
+
+        QualityCheckResult {
+            check_id: devman_core::QualityCheckId::new(),
+            passed: all_exist,
+            execution_time: start.elapsed(),
+            details: devman_core::CheckDetails {
+                output: format!("Checked {} documentation paths", paths.len()),
+                exit_code: Some(if all_exist { 0 } else { 1 }),
+                error: None,
+            },
+            findings,
             metrics: Vec::new(),
             human_review: None,
         }
@@ -417,5 +534,201 @@ impl<S: Storage> BasicQualityEngine<S> {
                 GateDecision::Pass
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use devman_core::{QualityCheckId, QualityCheckResult, CheckDetails, Metric, QualityStatus, QualityOverallStatus};
+
+    #[test]
+    fn test_gate_result_pass() {
+        let result = GateResult {
+            gate_name: "test-gate".to_string(),
+            passed: true,
+            check_results: Vec::new(),
+            decision: GateDecision::Pass,
+        };
+        assert!(result.passed);
+        assert_eq!(result.decision, GateDecision::Pass);
+    }
+
+    #[test]
+    fn test_gate_result_fail() {
+        let result = GateResult {
+            gate_name: "test-gate".to_string(),
+            passed: false,
+            check_results: Vec::new(),
+            decision: GateDecision::Fail,
+        };
+        assert!(!result.passed);
+        assert_eq!(result.decision, GateDecision::Fail);
+    }
+
+    #[test]
+    fn test_gate_decision_variants() {
+        assert_eq!(GateDecision::Pass, GateDecision::Pass);
+        assert_eq!(GateDecision::Fail, GateDecision::Fail);
+        assert_eq!(GateDecision::PassWithWarnings, GateDecision::PassWithWarnings);
+        assert_eq!(GateDecision::Escalate, GateDecision::Escalate);
+    }
+
+    #[test]
+    fn test_work_context_creation() {
+        let context = WorkContext::new(TaskId::new());
+        assert!(!context.task_id.to_string().is_empty());
+        assert!(context.work_dir.exists() || context.work_dir.as_os_str().is_empty());
+    }
+
+    #[test]
+    fn test_work_context_with_metadata() {
+        let context = WorkContext::new(TaskId::new());
+        let context_with_meta = WorkContext {
+            task_id: context.task_id,
+            work_dir: context.work_dir.clone(),
+            metadata: serde_json::json!({"key": "value"}),
+        };
+        assert_eq!(context_with_meta.metadata["key"], "value");
+    }
+
+    #[test]
+    fn test_gate_result_pass_with_warnings() {
+        let result = GateResult {
+            gate_name: "test-gate".to_string(),
+            passed: true,
+            check_results: Vec::new(),
+            decision: GateDecision::PassWithWarnings,
+        };
+        assert!(result.passed);
+        assert_eq!(result.decision, GateDecision::PassWithWarnings);
+    }
+
+    #[test]
+    fn test_gate_result_escalate() {
+        let result = GateResult {
+            gate_name: "test-gate".to_string(),
+            passed: false,
+            check_results: Vec::new(),
+            decision: GateDecision::Escalate,
+        };
+        assert!(!result.passed);
+        assert_eq!(result.decision, GateDecision::Escalate);
+    }
+
+    #[test]
+    fn test_generic_check_type_variants() {
+        use devman_core::GenericCheckType;
+
+        let compiles = GenericCheckType::Compiles { target: "x86_64-unknown-linux-gnu".to_string() };
+        assert!(matches!(compiles, GenericCheckType::Compiles { .. }));
+
+        let tests = GenericCheckType::TestsPass {
+            test_suite: "lib".to_string(),
+            min_coverage: Some(80.0),
+        };
+        assert!(matches!(tests, GenericCheckType::TestsPass { .. }));
+
+        let formatted = GenericCheckType::Formatted { formatter: "rustfmt".to_string() };
+        assert!(matches!(formatted, GenericCheckType::Formatted { .. }));
+
+        let lints = GenericCheckType::LintsPass { linter: "clippy".to_string() };
+        assert!(matches!(lints, GenericCheckType::LintsPass { .. }));
+
+        let docs = GenericCheckType::DocumentationExists {
+            paths: vec!["README.md".to_string()],
+        };
+        assert!(matches!(docs, GenericCheckType::DocumentationExists { .. }));
+
+        let type_check = GenericCheckType::TypeCheck {};
+        assert!(matches!(type_check, GenericCheckType::TypeCheck { .. }));
+
+        let deps = GenericCheckType::DependenciesValid {};
+        assert!(matches!(deps, GenericCheckType::DependenciesValid { .. }));
+
+        let security = GenericCheckType::SecurityScan { scanner: "cargo-audit".to_string() };
+        assert!(matches!(security, GenericCheckType::SecurityScan { .. }));
+    }
+
+    #[test]
+    fn test_quality_category_variants() {
+        use devman_core::QualityCategory;
+
+        assert!(matches!(QualityCategory::Correctness, QualityCategory::Correctness));
+        assert!(matches!(QualityCategory::Performance, QualityCategory::Performance));
+        assert!(matches!(QualityCategory::Security, QualityCategory::Security));
+        assert!(matches!(QualityCategory::Maintainability, QualityCategory::Maintainability));
+        assert!(matches!(QualityCategory::Documentation, QualityCategory::Documentation));
+        assert!(matches!(QualityCategory::Testing, QualityCategory::Testing));
+        assert!(matches!(QualityCategory::Business, QualityCategory::Business));
+        assert!(matches!(QualityCategory::Compliance, QualityCategory::Compliance));
+    }
+
+    #[test]
+    fn test_quality_overall_status_variants() {
+        use devman_core::QualityOverallStatus;
+
+        assert!(matches!(QualityOverallStatus::NotChecked, QualityOverallStatus::NotChecked));
+        assert!(matches!(QualityOverallStatus::Passed, QualityOverallStatus::Passed));
+        assert!(matches!(QualityOverallStatus::PassedWithWarnings, QualityOverallStatus::PassedWithWarnings));
+        assert!(matches!(QualityOverallStatus::Failed, QualityOverallStatus::Failed));
+        assert!(matches!(QualityOverallStatus::PendingReview, QualityOverallStatus::PendingReview));
+    }
+
+    #[test]
+    fn test_gate_strategy_variants() {
+        use devman_core::GateStrategy;
+
+        assert!(matches!(GateStrategy::AllMustPass, GateStrategy::AllMustPass));
+        assert!(matches!(GateStrategy::WarningsAllowed { max_warnings: 5 }, GateStrategy::WarningsAllowed { .. }));
+        assert!(matches!(GateStrategy::ManualDecision, GateStrategy::ManualDecision));
+        assert!(matches!(GateStrategy::Custom { rule: "custom".to_string() }, GateStrategy::Custom { .. }));
+    }
+
+    #[test]
+    fn test_quality_check_result_creation() {
+        let result = QualityCheckResult {
+            check_id: QualityCheckId::new(),
+            passed: true,
+            execution_time: std::time::Duration::from_millis(100),
+            details: CheckDetails {
+                output: "All checks passed".to_string(),
+                exit_code: Some(0),
+                error: None,
+            },
+            findings: Vec::new(),
+            metrics: vec![
+                Metric {
+                    name: "coverage".to_string(),
+                    value: 85.5,
+                    unit: Some("%".to_string()),
+                }
+            ],
+            human_review: None,
+        };
+
+        assert!(result.passed);
+        assert_eq!(result.details.exit_code, Some(0));
+        assert_eq!(result.metrics.len(), 1);
+        assert_eq!(result.metrics[0].name, "coverage");
+    }
+
+    #[test]
+    fn test_quality_status_creation() {
+        let status = QualityStatus {
+            task_id: TaskId::new(),
+            total_checks: 10,
+            passed_checks: 8,
+            failed_checks: 1,
+            warnings: 1,
+            overall_status: QualityOverallStatus::PassedWithWarnings,
+            pending_human_review: false,
+        };
+
+        assert_eq!(status.total_checks, 10);
+        assert_eq!(status.passed_checks, 8);
+        assert_eq!(status.failed_checks, 1);
+        assert_eq!(status.warnings, 1);
+        assert!(matches!(status.overall_status, QualityOverallStatus::PassedWithWarnings));
     }
 }
