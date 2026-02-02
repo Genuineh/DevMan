@@ -12,4 +12,4 @@ pub use tracker::{ProgressTracker, ProgressSnapshot};
 pub use blocker::{
     BlockerDetector, BlockerAnalysis, BlockerStats, ResolutionSuggestion, ResolutionAction,
 };
-pub use estimator::CompletionEstimator;
+pub use estimator::{CompletionEstimator, TimeEstimation, TaskComplexity};
