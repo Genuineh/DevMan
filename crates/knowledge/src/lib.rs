@@ -6,5 +6,6 @@
 
 pub mod service;
 pub mod template;
+pub mod classification;
 
 pub use service::KnowledgeService;
