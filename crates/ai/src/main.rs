@@ -7,7 +7,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use devman_ai::mcp_server::McpServer;
 use devman_ai::mcp_server::McpServerConfig;
-use tracing::{info, Level};
+use tracing::Level;
 use tracing_subscriber::fmt;
 
 #[derive(Parser)]
@@ -40,20 +40,14 @@ enum Commands {
     Info,
 }
 
-fn init_logging(to_stderr: bool) {
-    if to_stderr {
-        // Socket mode: disable logging entirely to avoid interfering with MCP protocol
-        // The VSCode MCP extension captures both stdout and stderr
-        tracing_subscriber::fmt()
-            .with_max_level(Level::ERROR)
-            .with_writer(std::io::sink)
-            .init();
-    } else {
-        // Stdio/info mode: log to stdout
-        fmt::Subscriber::builder()
-            .with_max_level(Level::INFO)
-            .init();
-    }
+fn init_logging(_to_stderr: bool) {
+    // Disable all logging to avoid interfering with MCP protocol
+    // VSCode MCP extension captures both stdout and stderr
+    // Only enable ERROR level logging to stderr (won't affect MCP communication)
+    tracing_subscriber::fmt()
+        .with_max_level(Level::ERROR)
+        .with_target(false)
+        .init();
 }
 
 #[tokio::main]
@@ -75,13 +69,11 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Stdio => {
             init_logging(false);
-            info!("Starting DevMan MCP Server (stdio mode)");
             server.start().await?;
         }
 
         Commands::Socket { path } => {
             init_logging(true);
-            info!("Starting DevMan MCP Server (socket mode)");
             server.start_with_socket(&path).await?;
         }
 
