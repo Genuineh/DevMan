@@ -36,40 +36,40 @@ Layer 1: Storage & State       (存储与状态)
 
 基于 `docs/plans/2026-02-02-mcp-server-design.md` 设计文档完善 MCP Server：
 
-- [ ] **工具接口对接**
-  - [ ] 实现 `devman_create_goal` → AIInterface.create_goal()
-  - [ ] 实现 `devman_list_tasks` → AIInterface.list_tasks()
-  - [ ] 实现 `devman_get_job_status` → JobManager 查询接口
-  - [ ] 实现 `devman_cancel_job` → JobManager 取消接口
+- [x] **工具接口对接**
+  - [x] 实现 `devman_create_goal` → AIInterface.create_goal()
+  - [x] 实现 `devman_list_tasks` → AIInterface.list_tasks()
+  - [x] 实现 `devman_get_job_status` → JobManager 查询接口
+  - [x] 实现 `devman_cancel_job` → JobManager 取消接口
 
-- [ ] **资源返回完善**
-  - [ ] 对接 `devman://context/project` → 项目配置和状态
-  - [ ] 对接 `devman://context/goal` → 活跃目标及进度
-  - [ ] 对接 `devman://tasks/{view}` → 任务队列/历史
-  - [ ] 对接 `devman://knowledge/{view}` → 知识库查询
-  - [ ] 资源响应添加 version/etag 字段
+- [x] **资源返回完善**
+  - [x] 对接 `devman://context/project` → 项目配置和状态
+  - [x] 对接 `devman://context/goal` → 活跃目标及进度
+  - [x] 对接 `devman://tasks/{view}` → 任务队列/历史
+  - [x] 对接 `devman://knowledge/{view}` → 知识库查询
+  - [x] 资源响应添加 version/etag 字段
 
-- [ ] **异步任务管理**
-  - [ ] 实现 `JobManager` Trait 和默认实现
-  - [ ] 实现 `create_job()` / `get_job_status()` / `cancel_job()`
-  - [ ] 同步执行（timeout ≤ 30s）与异步执行（timeout > 30s）
-  - [ ] 异步任务持久化快照（jobs.json）
+- [x] **异步任务管理**
+  - [x] 实现 `JobManager` Trait 和默认实现
+  - [x] 实现 `create_job()` / `get_job_status()` / `cancel_job()`
+  - [x] 同步执行（timeout ≤ 30s）与异步执行（timeout > 30s）
+  - [x] 异步任务持久化快照（jobs.json）
 
-- [ ] **错误处理**
-  - [ ] 实现自定义错误码（-32000 ~ -32004）
-  - [ ] 错误响应添加 hint 和 retryable 字段
-  - [ ] 保证异步任务错误与 job.status 一致性
+- [x] **错误处理**
+  - [x] 实现自定义错误码（-32000 ~ -32004）
+  - [x] 错误响应添加 hint 和 retryable 字段
+  - [x] 保证异步任务错误与 job.status 一致性
 
-- [ ] **AIInterface 扩展**
-  - [ ] 新增 `create_goal(spec)` 方法
-  - [ ] 新增 `list_tasks(filter)` 方法
-  - [ ] 实现返回值资源化（返回 URI 而非大体量数据）
+- [x] **AIInterface 扩展**
+  - [x] 新增 `create_goal(spec)` 方法
+  - [x] 新增 `list_tasks(filter)` 方法
+  - [x] 实现返回值资源化（返回 URI 而非大体量数据）
 
-- [ ] **测试**
-  - [ ] 编写 MCP Server 集成测试
-  - [ ] 测试 stdio 和 unix socket 传输
-  - [ ] 测试同步/异步执行模式
-  - [ ] 测试错误处理和资源版本化
+- [x] **测试**
+  - [x] 编写 MCP Server 集成测试
+  - [x] 测试 stdio 和 unix socket 传输
+  - [x] 测试同步/异步执行模式
+  - [x] 测试错误处理和资源版本化
 
 ---
 

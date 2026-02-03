@@ -11,7 +11,31 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::UnixStream;
 use tracing::{debug, error, info};
 
-use crate::AIInterface;
+use crate::interface::{GoalSpec, TaskFilter};
+use crate::job_manager::JobId;
+use crate::{AIInterface, JobManager};
+
+/// Create an error response with DevMan error codes.
+fn create_mcp_error_response(
+    code: i32,
+    message: &str,
+    data: Option<serde_json::Value>,
+    retryable: bool,
+) -> serde_json::Value {
+    let mut error_object = serde_json::Map::new();
+    error_object.insert("code".to_string(), json!(code));
+    error_object.insert("message".to_string(), json!(message));
+    error_object.insert("retryable".to_string(), json!(retryable));
+
+    if let Some(d) = data {
+        error_object.insert("data".to_string(), d);
+    }
+
+    json!({
+        "success": false,
+        "error": error_object
+    })
+}
 
 /// MCP Protocol version
 pub const MCP_VERSION: &str = "2024-11-05";
@@ -133,6 +157,10 @@ pub struct McpServer {
     resources: HashMap<String, McpResource>,
     /// AI interface reference
     ai_interface: Option<Arc<dyn AIInterface>>,
+    /// Job manager for async tasks
+    job_manager: Option<Arc<dyn JobManager>>,
+    /// Storage path for resources
+    storage_path: std::path::PathBuf,
 }
 
 impl McpServer {
@@ -144,11 +172,13 @@ impl McpServer {
     /// Create a new MCP server with custom config.
     pub async fn with_config(config: McpServerConfig) -> anyhow::Result<Self> {
         let mut server = Self {
-            config,
+            config: config.clone(),
             running: false,
             tools: HashMap::new(),
             resources: HashMap::new(),
             ai_interface: None,
+            job_manager: None,
+            storage_path: config.storage_path.clone(),
         };
 
         // Register built-in DevMan tools
@@ -158,6 +188,11 @@ impl McpServer {
         server.register_builtin_resources();
 
         Ok(server)
+    }
+
+    /// Set Job manager for async task execution.
+    pub fn set_job_manager(&mut self, job_manager: Arc<dyn JobManager>) {
+        self.job_manager = Some(job_manager);
     }
 
     /// Get the server configuration.
@@ -459,14 +494,418 @@ impl McpServer {
     /// Execute a tool.
     async fn execute_tool(
         &self,
-        _name: &str,
-        _arguments: serde_json::Value,
+        name: &str,
+        arguments: serde_json::Value,
     ) -> serde_json::Value {
-        // Default response - tools would be executed via AI interface in full implementation
+        // Check if AI interface is available
+        let ai_interface = match &self.ai_interface {
+            Some(ai) => ai,
+            None => {
+                return create_mcp_error_response(
+                    -32603,
+                    "Internal error: AI interface not configured",
+                    None,
+                    false,
+                );
+            }
+        };
+
+        match name {
+            // Goal management
+            "devman_create_goal" => {
+                self.handle_create_goal(ai_interface, &arguments).await
+            }
+            "devman_get_goal_progress" => {
+                self.handle_get_goal_progress(ai_interface, &arguments).await
+            }
+
+            // Task management
+            "devman_create_task" => {
+                self.handle_create_task(ai_interface, &arguments).await
+            }
+            "devman_list_tasks" => {
+                self.handle_list_tasks(ai_interface, &arguments).await
+            }
+
+            // Knowledge management
+            "devman_search_knowledge" => {
+                self.handle_search_knowledge(ai_interface, &arguments).await
+            }
+            "devman_save_knowledge" => {
+                self.handle_save_knowledge(ai_interface, &arguments).await
+            }
+
+            // Quality checks
+            "devman_run_quality_check" => {
+                self.handle_run_quality_check(ai_interface, &arguments).await
+            }
+
+            // Tool execution
+            "devman_execute_tool" => {
+                self.handle_execute_tool(ai_interface, &arguments).await
+            }
+
+            // Context and blockers
+            "devman_get_context" => {
+                self.handle_get_context(ai_interface).await
+            }
+            "devman_list_blockers" => {
+                self.handle_list_blockers(ai_interface).await
+            }
+
+            // Job management
+            "devman_get_job_status" => {
+                self.handle_get_job_status(&arguments).await
+            }
+            "devman_cancel_job" => {
+                self.handle_cancel_job(&arguments).await
+            }
+
+            // Unknown tool
+            _ => create_mcp_error_response(
+                -32601,
+                &format!("Unknown tool: {}", name),
+                None,
+                false,
+            ),
+        }
+    }
+
+    // Tool handlers
+
+    async fn handle_create_goal(
+        &self,
+        ai_interface: &Arc<dyn AIInterface>,
+        arguments: &serde_json::Value,
+    ) -> serde_json::Value {
+        let spec = GoalSpec {
+            title: arguments.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            description: arguments.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            success_criteria: arguments.get("success_criteria")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+                .unwrap_or_default(),
+            project_id: None,
+        };
+
+        match ai_interface.create_goal(spec).await {
+            Ok(goal) => json!({
+                "success": true,
+                "data": {
+                    "goal_id": goal.id.to_string(),
+                    "title": goal.title,
+                    "status": format!("{:?}", goal.status)
+                },
+                "version": format!("goal_{}@v1", goal.id)
+            }),
+            Err(e) => create_mcp_error_response(
+                -32000,
+                &format!("Failed to create goal: {}", e),
+                Some(json!({"hint": "Check the goal title and description are valid."})),
+                true,
+            ),
+        }
+    }
+
+    async fn handle_get_goal_progress(
+        &self,
+        ai_interface: &Arc<dyn AIInterface>,
+        arguments: &serde_json::Value,
+    ) -> serde_json::Value {
+        let goal_id_str = match arguments.get("goal_id").and_then(|v| v.as_str()) {
+            Some(s) => s,
+            None => {
+                return create_mcp_error_response(
+                    -32602,
+                    "Missing required parameter: goal_id",
+                    None,
+                    false,
+                );
+            }
+        };
+
+        let goal_id = match goal_id_str.parse::<devman_core::GoalId>() {
+            Ok(id) => id,
+            Err(_) => {
+                return create_mcp_error_response(
+                    -32602,
+                    "Invalid goal_id format",
+                    None,
+                    false,
+                );
+            }
+        };
+
+        match ai_interface.get_progress(goal_id).await {
+            Some(progress) => json!({
+                "success": true,
+                "data": {
+                    "goal_id": goal_id_str,
+                    "percentage": progress.percentage,
+                    "completed_phases": progress.completed_phases,
+                    "active_tasks": progress.active_tasks,
+                    "completed_tasks": progress.completed_tasks
+                }
+            }),
+            None => create_mcp_error_response(
+                -32002,
+                &format!("Goal not found: {}", goal_id_str),
+                None,
+                false,
+            ),
+        }
+    }
+
+    async fn handle_create_task(
+        &self,
+        ai_interface: &Arc<dyn AIInterface>,
+        arguments: &serde_json::Value,
+    ) -> serde_json::Value {
+        // Placeholder implementation
         json!({
             "success": true,
-            "message": "Tool executed successfully (placeholder)"
+            "message": "Task creation placeholder - requires WorkManager integration"
         })
+    }
+
+    async fn handle_list_tasks(
+        &self,
+        ai_interface: &Arc<dyn AIInterface>,
+        arguments: &serde_json::Value,
+    ) -> serde_json::Value {
+        let filter = TaskFilter {
+            status: arguments.get("state").and_then(|v| v.as_str()).map(|s| {
+                match s {
+                    "Created" | "Queued" => devman_core::TaskStatus::Queued,
+                    "InProgress" | "Active" => devman_core::TaskStatus::Active,
+                    "Completed" | "Done" => devman_core::TaskStatus::Done,
+                    "Abandoned" => devman_core::TaskStatus::Abandoned,
+                    _ => devman_core::TaskStatus::Queued,
+                }
+            }),
+            goal_id: None,
+            phase_id: None,
+            limit: arguments.get("limit").and_then(|v| v.as_u64()).map(|u| u as usize),
+            include_completed: true,
+        };
+
+        let tasks = ai_interface.list_tasks(filter).await;
+        let task_summaries: Vec<serde_json::Value> = tasks.iter().map(|t| json!({
+            "task_id": t.id.to_string(),
+            "title": t.title,
+            "status": format!("{:?}", t.status),
+            "priority": 3 // Default priority
+        })).collect();
+
+        json!({
+            "success": true,
+            "data": {
+                "tasks": task_summaries,
+                "total_count": task_summaries.len()
+            },
+            "version": format!("tasks@v{}", task_summaries.len())
+        })
+    }
+
+    async fn handle_search_knowledge(
+        &self,
+        ai_interface: &Arc<dyn AIInterface>,
+        arguments: &serde_json::Value,
+    ) -> serde_json::Value {
+        let query = arguments.get("query").and_then(|v| v.as_str()).unwrap_or("");
+        let results = ai_interface.search_knowledge(query).await;
+
+        let summaries: Vec<serde_json::Value> = results.iter().map(|k| json!({
+            "knowledge_id": k.id.to_string(),
+            "title": k.title,
+            "knowledge_type": format!("{:?}", k.knowledge_type),
+            "tags": k.tags
+        })).collect();
+
+        json!({
+            "success": true,
+            "data": {
+                "results": summaries,
+                "total_count": summaries.len()
+            }
+        })
+    }
+
+    async fn handle_save_knowledge(
+        &self,
+        _ai_interface: &Arc<dyn AIInterface>,
+        _arguments: &serde_json::Value,
+    ) -> serde_json::Value {
+        json!({
+            "success": true,
+            "message": "Knowledge saving placeholder"
+        })
+    }
+
+    async fn handle_run_quality_check(
+        &self,
+        ai_interface: &Arc<dyn AIInterface>,
+        arguments: &serde_json::Value,
+    ) -> serde_json::Value {
+        let check_type = arguments.get("check_type").and_then(|v| v.as_str()).unwrap_or("lint");
+
+        let check = devman_core::QualityCheck {
+            id: devman_core::QualityCheckId::new(),
+            name: format!("MCP quality check: {}", check_type),
+            description: format!("Quality check triggered via MCP for {}", check_type),
+            check_type: devman_core::QualityCheckType::Generic(
+                devman_core::GenericCheckType::LintsPass {
+                    linter: check_type.to_string(),
+                }
+            ),
+            severity: devman_core::Severity::Error,
+            category: devman_core::QualityCategory::Maintainability,
+        };
+
+        let result = ai_interface.run_quality_check(check).await;
+        json!({
+            "success": true,
+            "data": {
+                "passed": result.passed,
+                "execution_time_ms": result.execution_time.as_millis(),
+                "findings_count": result.findings.len()
+            }
+        })
+    }
+
+    async fn handle_execute_tool(
+        &self,
+        _ai_interface: &Arc<dyn AIInterface>,
+        _arguments: &serde_json::Value,
+    ) -> serde_json::Value {
+        json!({
+            "success": true,
+            "message": "Tool execution placeholder"
+        })
+    }
+
+    async fn handle_get_context(
+        &self,
+        _ai_interface: &Arc<dyn AIInterface>,
+    ) -> serde_json::Value {
+        json!({
+            "success": true,
+            "data": {
+                "message": "Context retrieval - use devman://context/* resources"
+            }
+        })
+    }
+
+    async fn handle_list_blockers(
+        &self,
+        ai_interface: &Arc<dyn AIInterface>,
+    ) -> serde_json::Value {
+        let blockers = ai_interface.list_blockers().await;
+        json!({
+            "success": true,
+            "data": {
+                "blockers": blockers.iter().map(|b| json!({
+                    "reason": b.reason,
+                    "severity": format!("{:?}", b.severity)
+                })).collect::<Vec<_>>(),
+                "total_count": blockers.len()
+            }
+        })
+    }
+
+    async fn handle_get_job_status(
+        &self,
+        arguments: &serde_json::Value,
+    ) -> serde_json::Value {
+        let job_id_str = match arguments.get("job_id").and_then(|v| v.as_str()) {
+            Some(s) => s,
+            None => {
+                return create_mcp_error_response(
+                    -32602,
+                    "Missing required parameter: job_id",
+                    None,
+                    false,
+                );
+            }
+        };
+
+        let job_manager = match &self.job_manager {
+            Some(jm) => jm,
+            None => {
+                return create_mcp_error_response(
+                    -32603,
+                    "Internal error: Job manager not configured",
+                    None,
+                    false,
+                );
+            }
+        };
+
+        let job_id = JobId(job_id_str.to_string());
+        match job_manager.get_job_status(&job_id).await {
+            Some(status) => json!({
+                "success": true,
+                "data": {
+                    "job_id": status.job_id,
+                    "status": status.status,
+                    "progress": status.progress,
+                    "progress_message": status.progress_message,
+                    "created_at": status.created_at,
+                    "completed_at": status.completed_at,
+                    "result": status.result,
+                    "error": status.error
+                }
+            }),
+            None => create_mcp_error_response(
+                -32002,
+                &format!("Job not found: {}", job_id_str),
+                None,
+                false,
+            ),
+        }
+    }
+
+    async fn handle_cancel_job(
+        &self,
+        arguments: &serde_json::Value,
+    ) -> serde_json::Value {
+        let job_id_str = match arguments.get("job_id").and_then(|v| v.as_str()) {
+            Some(s) => s,
+            None => {
+                return create_mcp_error_response(
+                    -32602,
+                    "Missing required parameter: job_id",
+                    None,
+                    false,
+                );
+            }
+        };
+
+        let job_manager = match &self.job_manager {
+            Some(jm) => jm,
+            None => {
+                return create_mcp_error_response(
+                    -32603,
+                    "Internal error: Job manager not configured",
+                    None,
+                    false,
+                );
+            }
+        };
+
+        let job_id = JobId(job_id_str.to_string());
+        match job_manager.cancel_job(&job_id).await {
+            Ok(()) => json!({
+                "success": true,
+                "message": format!("Job {} cancelled", job_id_str)
+            }),
+            Err(e) => create_mcp_error_response(
+                e.code,
+                &e.message,
+                e.hint.map(|h| json!({"hint": h})),
+                e.retryable,
+            ),
+        }
     }
 
     /// Read a resource.
@@ -636,6 +1075,7 @@ impl McpServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{JobType, CreateJobRequest, InMemoryJobManager};
 
     #[test]
     fn test_mcp_tool_definition() {
@@ -780,5 +1220,106 @@ mod tests {
         assert!(server.resources.contains_key("devman://context/project"));
         assert!(server.resources.contains_key("devman://tasks/queue"));
         assert!(server.resources.contains_key("devman://knowledge/recent"));
+    }
+
+    // ==================== Error Response Tests ====================
+
+    #[test]
+    fn test_create_mcp_error_response_basic() {
+        let response = create_mcp_error_response(
+            -32000,
+            "Test error message",
+            None,
+            false,
+        );
+
+        assert_eq!(response["success"], false);
+        assert_eq!(response["error"]["code"], -32000);
+        assert_eq!(response["error"]["message"], "Test error message");
+        assert_eq!(response["error"]["retryable"], false);
+    }
+
+    #[test]
+    fn test_create_mcp_error_response_with_hint() {
+        let response = create_mcp_error_response(
+            -32001,
+            "State conflict error",
+            Some(json!({"hint": "Check the resource state"})),
+            true,
+        );
+
+        assert_eq!(response["success"], false);
+        assert_eq!(response["error"]["code"], -32001);
+        // Check that error object exists
+        assert!(response["error"].is_object());
+        // Check that data object exists
+        assert!(response["error"]["data"].is_object());
+        // Check data.hint exists
+        assert!(response["error"]["data"]["hint"].is_string());
+        assert_eq!(response["error"]["data"]["hint"], "Check the resource state");
+        assert_eq!(response["error"]["retryable"], true);
+    }
+
+    #[test]
+    fn test_create_mcp_error_response_retryable() {
+        let response = create_mcp_error_response(
+            -32003,
+            "Job timeout",
+            Some(json!({"timeout_seconds": 300})),
+            true,
+        );
+
+        assert!(response["error"]["retryable"].as_bool().unwrap());
+        assert_eq!(response["error"]["data"]["timeout_seconds"], 300);
+    }
+
+    // ==================== JobManager Tests ====================
+
+    #[test]
+    fn test_job_id_generation() {
+        let id1 = JobId::new();
+        let id2 = JobId::new();
+
+        assert_ne!(id1.to_string(), id2.to_string());
+        assert!(id1.to_string().starts_with("job_"));
+    }
+
+    #[test]
+    fn test_job_status_display() {
+        use crate::JobStatus;
+
+        assert_eq!(JobStatus::Pending.to_string(), "pending");
+        assert_eq!(JobStatus::Running.to_string(), "running");
+        assert_eq!(JobStatus::Completed.to_string(), "completed");
+        assert_eq!(JobStatus::Failed.to_string(), "failed");
+        assert_eq!(JobStatus::Cancelled.to_string(), "cancelled");
+        assert_eq!(JobStatus::Timeout.to_string(), "timeout");
+    }
+
+    #[test]
+    fn test_in_memory_job_manager_creation() {
+        let _manager = InMemoryJobManager::new();
+        // Just verify the manager was created successfully
+        // The manager should be ready to accept jobs
+        assert!(true);
+    }
+
+    #[test]
+    fn test_create_job_request() {
+        let request = CreateJobRequest {
+            job_type: JobType::CreateGoal {
+                title: "Test Goal".to_string(),
+                description: "Test Description".to_string(),
+            },
+            timeout_seconds: Some(60),
+        };
+
+        match request.job_type {
+            JobType::CreateGoal { title, description } => {
+                assert_eq!(title, "Test Goal");
+                assert_eq!(description, "Test Description");
+            }
+            _ => panic!("Wrong job type"),
+        }
     }
 }

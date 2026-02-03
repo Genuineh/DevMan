@@ -2,12 +2,13 @@
 
 use async_trait::async_trait;
 use devman_core::{
-    Goal, GoalId, GoalProgress, Knowledge, Phase, PhaseId, QualityCheck, QualityCheckId,
-    QualityStatus, Task, TaskId, WorkRecord, WorkResult,
+    GoalId, GoalProgress, Goal, Knowledge, PhaseId, QualityCheck, QualityCheckId,
+    QualityStatus, SuccessCriterion, Task, TaskId, TaskStatus, VerificationMethod, WorkRecord, WorkResult,
 };
 use devman_knowledge::KnowledgeService;
 use devman_progress::ProgressTracker;
 use devman_quality::{QualityEngine, engine::WorkContext as QualityWorkContext};
+use devman_storage::Storage;
 use devman_tools::ToolInput;
 use devman_work::{WorkManager, TaskSpec, WorkManagementContext};
 use std::sync::Arc;
@@ -19,6 +20,17 @@ pub trait AIInterface: Send + Sync {
 
     /// Get current work context.
     async fn get_current_context(&self) -> WorkManagementContext;
+
+    // === Goal Operations ===
+
+    /// Create a new goal.
+    async fn create_goal(&self, spec: GoalSpec) -> Result<Goal, anyhow::Error>;
+
+    /// Get goal by ID.
+    async fn get_goal(&self, goal_id: GoalId) -> Option<Goal>;
+
+    /// List goals with optional filter.
+    async fn list_goals(&self, filter: GoalFilter) -> Vec<Goal>;
 
     // === Knowledge Retrieval ===
 
@@ -40,6 +52,12 @@ pub trait AIInterface: Send + Sync {
 
     /// Create a new task.
     async fn create_task(&self, spec: TaskSpec) -> Result<Task, anyhow::Error>;
+
+    /// Get task by ID.
+    async fn get_task(&self, task_id: TaskId) -> Option<Task>;
+
+    /// List tasks with optional filter.
+    async fn list_tasks(&self, filter: TaskFilter) -> Vec<Task>;
 
     /// Start executing a task.
     async fn start_task(&self, task_id: TaskId) -> Result<WorkRecord, anyhow::Error>;
@@ -69,8 +87,47 @@ pub trait AIInterface: Send + Sync {
     async fn save_knowledge(&self, knowledge: Knowledge) -> Result<(), anyhow::Error>;
 }
 
+/// Goal creation specification.
+#[derive(Debug, Clone)]
+pub struct GoalSpec {
+    /// Goal title
+    pub title: String,
+    /// Goal description
+    pub description: String,
+    /// Success criteria
+    pub success_criteria: Vec<String>,
+    /// Associated project ID (optional)
+    pub project_id: Option<devman_core::ProjectId>,
+}
+
+/// Goal filter for listing.
+#[derive(Debug, Clone, Default)]
+pub struct GoalFilter {
+    /// Filter by status
+    pub status: Option<devman_core::GoalStatus>,
+    /// Maximum results
+    pub limit: Option<usize>,
+}
+
+/// Task filter for listing.
+#[derive(Debug, Clone, Default)]
+pub struct TaskFilter {
+    /// Filter by status
+    pub status: Option<devman_core::TaskStatus>,
+    /// Filter by goal ID
+    pub goal_id: Option<GoalId>,
+    /// Filter by phase ID
+    pub phase_id: Option<devman_core::PhaseId>,
+    /// Maximum results
+    pub limit: Option<usize>,
+    /// Include completed tasks
+    pub include_completed: bool,
+}
+
 /// Basic AI interface implementation.
 pub struct BasicAIInterface {
+    /// Storage reference for CRUD operations
+    storage: Arc<tokio::sync::Mutex<dyn Storage>>,
     work_manager: Arc<tokio::sync::Mutex<dyn WorkManager>>,
     progress_tracker: Arc<dyn ProgressTracker>,
     knowledge_service: Arc<dyn KnowledgeService>,
@@ -81,6 +138,7 @@ pub struct BasicAIInterface {
 impl BasicAIInterface {
     /// Create a new AI interface.
     pub fn new(
+        storage: Arc<tokio::sync::Mutex<dyn Storage>>,
         work_manager: Arc<tokio::sync::Mutex<dyn WorkManager>>,
         progress_tracker: Arc<dyn ProgressTracker>,
         knowledge_service: Arc<dyn KnowledgeService>,
@@ -88,6 +146,7 @@ impl BasicAIInterface {
         tool_executor: Arc<dyn devman_tools::ToolExecutor>,
     ) -> Self {
         Self {
+            storage,
             work_manager,
             progress_tracker,
             knowledge_service,
@@ -102,6 +161,62 @@ impl AIInterface for BasicAIInterface {
     async fn get_current_context(&self) -> WorkManagementContext {
         // Return empty context for now
         WorkManagementContext::new()
+    }
+
+    async fn create_goal(&self, spec: GoalSpec) -> Result<Goal, anyhow::Error> {
+        let goal = Goal {
+            id: GoalId::new(),
+            title: spec.title,
+            description: spec.description,
+            success_criteria: spec
+                .success_criteria
+                .into_iter()
+                .map(|desc| SuccessCriterion {
+                    id: devman_core::CriterionId::new(),
+                    description: desc,
+                    verification: VerificationMethod::Manual {
+                        reviewer: String::new(),
+                    },
+                    status: devman_core::CriterionStatus::NotStarted,
+                })
+                .collect(),
+            progress: devman_core::GoalProgress {
+                percentage: 0.0,
+                completed_phases: Vec::new(),
+                active_tasks: 0,
+                completed_tasks: 0,
+                estimated_completion: None,
+                blockers: Vec::new(),
+            },
+            project_id: spec.project_id.unwrap_or_else(devman_core::ProjectId::new),
+            current_phase: PhaseId::new(),
+            status: devman_core::GoalStatus::Active,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        self.storage.lock().await.save_goal(&goal).await?;
+        Ok(goal)
+    }
+
+    async fn get_goal(&self, goal_id: GoalId) -> Option<Goal> {
+        self.storage.lock().await.load_goal(goal_id).await.ok().flatten()
+    }
+
+    async fn list_goals(&self, filter: GoalFilter) -> Vec<Goal> {
+        let mut goals = self.storage.lock().await.list_goals().await.unwrap_or_default();
+
+        // Apply filters
+        if let Some(status) = filter.status {
+            goals.retain(|g| g.status == status);
+        }
+
+        // Apply limit
+        if let Some(limit) = filter.limit {
+            goals.truncate(limit);
+        }
+
+        goals
     }
 
     async fn search_knowledge(&self, query: &str) -> Vec<Knowledge> {
@@ -127,6 +242,31 @@ impl AIInterface for BasicAIInterface {
             .await
             .create_task(spec)
             .await
+    }
+
+    async fn get_task(&self, task_id: TaskId) -> Option<Task> {
+        self.storage.lock().await.load_task(task_id).await.ok().flatten()
+    }
+
+    async fn list_tasks(&self, filter: TaskFilter) -> Vec<Task> {
+        let storage_filter = devman_core::TaskFilter::default();
+        let mut tasks = self.storage.lock().await.list_tasks(&storage_filter).await.unwrap_or_default();
+
+        // Apply filters
+        if let Some(status) = filter.status {
+            tasks.retain(|t| t.status == status);
+        }
+
+        if !filter.include_completed {
+            tasks.retain(|t| t.status != devman_core::TaskStatus::Done);
+        }
+
+        // Apply limit
+        if let Some(limit) = filter.limit {
+            tasks.truncate(limit);
+        }
+
+        tasks
     }
 
     async fn start_task(&self, task_id: TaskId) -> Result<WorkRecord, anyhow::Error> {

@@ -26,9 +26,10 @@ mod quality;
 pub use id::*;
 
 // Goal & Project
-pub use goal::{Goal, GoalStatus, GoalProgress, SuccessCriterion, CriterionStatus};
+pub use goal::{Goal, GoalStatus, GoalProgress, SuccessCriterion, CriterionStatus, VerificationMethod};
 pub use project::{Project, ProjectConfig, DirStructure, ToolConfig, BuildTool, TestFramework};
 pub use phase::{Phase, PhaseStatus, PhaseProgress, AcceptanceCriterion};
+pub use id::PhaseId;
 
 // Task & Work
 pub use task::{
