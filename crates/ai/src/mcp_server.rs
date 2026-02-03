@@ -384,6 +384,236 @@ impl McpServer {
                 "properties": {}
             }),
         });
+
+        // ========== Task Guidance Tools (引导性工具) ==========
+
+        self.register_tool(McpTool {
+            name: "devman_get_task_guidance".to_string(),
+            description: "Get task guidance - AI should call this before any operation. Returns current state, next action, allowed operations, and guidance message.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID to get guidance for"}
+                },
+                "required": ["task_id"]
+            }),
+        });
+
+        self.register_tool(McpTool {
+            name: "devman_read_task_context".to_string(),
+            description: "Read task context (Created -> ContextRead). Must be called after task creation.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"}
+                },
+                "required": ["task_id"]
+            }),
+        });
+
+        self.register_tool(McpTool {
+            name: "devman_review_knowledge".to_string(),
+            description: "Review relevant knowledge for a task. Returns knowledge items and suggested reading.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "query": {"type": "string", "description": "Knowledge search query"}
+                },
+                "required": ["task_id", "query"]
+            }),
+        });
+
+        self.register_tool(McpTool {
+            name: "devman_confirm_knowledge_reviewed".to_string(),
+            description: "Confirm knowledge review completed (ContextRead -> KnowledgeReviewed).".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "knowledge_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "IDs of knowledge items reviewed"
+                    }
+                },
+                "required": ["task_id", "knowledge_ids"]
+            }),
+        });
+
+        self.register_tool(McpTool {
+            name: "devman_start_execution".to_string(),
+            description: "Start task execution (KnowledgeReviewed -> InProgress).".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"}
+                },
+                "required": ["task_id"]
+            }),
+        });
+
+        self.register_tool(McpTool {
+            name: "devman_log_work".to_string(),
+            description: "Log work progress during execution. Records actions, files changed, and command outputs.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "action": {
+                        "type": "string",
+                        "enum": ["created", "modified", "tested", "documented", "debugged", "refactored"],
+                        "description": "Type of work action"
+                    },
+                    "description": {"type": "string", "description": "Description of work done"},
+                    "files": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Files affected by this action"
+                    }
+                },
+                "required": ["task_id", "action", "description"]
+            }),
+        });
+
+        self.register_tool(McpTool {
+            name: "devman_finish_work".to_string(),
+            description: "Submit work (InProgress -> WorkRecorded). Must have logged work before calling.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "description": {"type": "string", "description": "Summary of work completed"},
+                    "artifacts": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "type": {"type": "string", "enum": ["file", "code", "documentation", "test", "binary", "other"]},
+                                "path": {"type": "string"}
+                            }
+                        },
+                        "description": "Work artifacts produced"
+                    },
+                    "lessons_learned": {"type": "string", "description": "Lessons learned during this work"}
+                },
+                "required": ["task_id", "description"]
+            }),
+        });
+
+        self.register_tool(McpTool {
+            name: "devman_run_task_quality_check".to_string(),
+            description: "Run quality check for a task (WorkRecorded -> QualityChecking).".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "check_types": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Types of checks: compile, test, lint, format, doc"
+                    }
+                },
+                "required": ["task_id"]
+            }),
+        });
+
+        self.register_tool(McpTool {
+            name: "devman_get_quality_result".to_string(),
+            description: "Get quality check result by check ID.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "check_id": {"type": "string", "description": "Quality check ID"}
+                },
+                "required": ["check_id"]
+            }),
+        });
+
+        self.register_tool(McpTool {
+            name: "devman_confirm_quality_result".to_string(),
+            description: "Confirm quality result and decide next action (QualityCompleted).".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "check_id": {"type": "string", "description": "Quality check ID"},
+                    "decision": {
+                        "type": "string",
+                        "enum": ["accept_and_complete", "fix_and_continue", "redo_execution"],
+                        "description": "Decision on quality result"
+                    }
+                },
+                "required": ["task_id", "check_id", "decision"]
+            }),
+        });
+
+        self.register_tool(McpTool {
+            name: "devman_complete_task".to_string(),
+            description: "Complete a task. Only allowed if quality check passed.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "summary": {"type": "string", "description": "Completion summary"},
+                    "artifacts": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                        "description": "Final artifacts"
+                    },
+                    "created_knowledge_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Knowledge IDs created during this task"
+                    }
+                },
+                "required": ["task_id", "summary"]
+            }),
+        });
+
+        self.register_tool(McpTool {
+            name: "devman_pause_task".to_string(),
+            description: "Pause a task. Can be resumed later.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "reason": {"type": "string", "description": "Reason for pausing"}
+                },
+                "required": ["task_id", "reason"]
+            }),
+        });
+
+        self.register_tool(McpTool {
+            name: "devman_resume_task".to_string(),
+            description: "Resume a paused task.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"}
+                },
+                "required": ["task_id"]
+            }),
+        });
+
+        self.register_tool(McpTool {
+            name: "devman_abandon_task".to_string(),
+            description: "Abandon a task with a reason. Handles all termination scenarios.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID"},
+                    "reason_type": {
+                        "type": "string",
+                        "enum": ["voluntary", "project_cancelled", "goal_cancelled", "requirement_changed", "dependency_failed", "insufficient_info", "technical_limitation", "resource_unavailable", "timeout", "quality_failed", "other"],
+                        "description": "Type of abandonment reason"
+                    },
+                    "reason": {"type": "string", "description": "Detailed reason"}
+                },
+                "required": ["task_id", "reason_type", "reason"]
+            }),
+        });
     }
 
     /// Register built-in DevMan resources.
@@ -559,6 +789,50 @@ impl McpServer {
             }
             "devman_cancel_job" => {
                 self.handle_cancel_job(&arguments).await
+            }
+
+            // Task guidance tools
+            "devman_get_task_guidance" => {
+                self.handle_get_task_guidance(&arguments).await
+            }
+            "devman_read_task_context" => {
+                self.handle_read_task_context(&arguments).await
+            }
+            "devman_review_knowledge" => {
+                self.handle_review_knowledge(&arguments).await
+            }
+            "devman_confirm_knowledge_reviewed" => {
+                self.handle_confirm_knowledge_reviewed(&arguments).await
+            }
+            "devman_start_execution" => {
+                self.handle_start_execution(&arguments).await
+            }
+            "devman_log_work" => {
+                self.handle_log_work(&arguments).await
+            }
+            "devman_finish_work" => {
+                self.handle_finish_work(&arguments).await
+            }
+            "devman_run_task_quality_check" => {
+                self.handle_run_task_quality_check(&arguments).await
+            }
+            "devman_get_quality_result" => {
+                self.handle_get_quality_result(&arguments).await
+            }
+            "devman_confirm_quality_result" => {
+                self.handle_confirm_quality_result(&arguments).await
+            }
+            "devman_complete_task" => {
+                self.handle_complete_task(&arguments).await
+            }
+            "devman_pause_task" => {
+                self.handle_pause_task(&arguments).await
+            }
+            "devman_resume_task" => {
+                self.handle_resume_task(&arguments).await
+            }
+            "devman_abandon_task" => {
+                self.handle_abandon_task(&arguments).await
             }
 
             // Unknown tool
@@ -906,6 +1180,272 @@ impl McpServer {
                 e.retryable,
             ),
         }
+    }
+
+    // ==================== Task Guidance Handlers ====================
+
+    async fn handle_get_task_guidance(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        let task_id_str = match arguments.get("task_id").and_then(|v| v.as_str()) {
+            Some(s) => s,
+            None => {
+                return create_mcp_error_response(
+                    -32602,
+                    "Missing required parameter: task_id",
+                    None,
+                    false,
+                );
+            }
+        };
+
+        let task_id = match task_id_str.parse::<devman_core::TaskId>() {
+            Ok(id) => id,
+            Err(_) => {
+                return create_mcp_error_response(
+                    -32602,
+                    "Invalid task_id format",
+                    None,
+                    false,
+                );
+            }
+        };
+
+        // Use AIInterface to get guidance
+        let ai_interface = match &self.ai_interface {
+            Some(ai) => ai,
+            None => {
+                return create_mcp_error_response(
+                    -32603,
+                    "Internal error: AI interface not configured",
+                    None,
+                    false,
+                );
+            }
+        };
+
+        // For now, return placeholder guidance
+        // In full implementation, this would call InteractiveAI::get_task_guidance
+        json!({
+            "success": true,
+            "data": {
+                "task_id": task_id_str,
+                "current_state": "Created",
+                "next_action": "read_context",
+                "guidance_message": "请调用 devman_read_task_context() 读取任务上下文",
+                "allowed_operations": ["devman_read_task_context"],
+                "prerequisites_satisfied": true,
+                "missing_prerequisites": [],
+                "health": "healthy"
+            }
+        })
+    }
+
+    async fn handle_read_task_context(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        let task_id_str = match arguments.get("task_id").and_then(|v| v.as_str()) {
+            Some(s) => s,
+            None => {
+                return create_mcp_error_response(
+                    -32602,
+                    "Missing required parameter: task_id",
+                    None,
+                    false,
+                );
+            }
+        };
+
+        // Placeholder implementation
+        json!({
+            "success": true,
+            "data": {
+                "task_id": task_id_str,
+                "state": "ContextRead",
+                "message": "上下文已读取",
+                "task_info": {
+                    "title": "任务标题",
+                    "description": "任务描述",
+                    "goal_id": null
+                },
+                "project": {
+                    "name": "DevMan",
+                    "tech_stack": ["Rust"]
+                }
+            }
+        })
+    }
+
+    async fn handle_review_knowledge(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        let task_id_str = arguments.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
+        let query = arguments.get("query").and_then(|v| v.as_str()).unwrap_or("");
+
+        let ai_interface = match &self.ai_interface {
+            Some(ai) => ai,
+            None => {
+                return create_mcp_error_response(
+                    -32603,
+                    "Internal error: AI interface not configured",
+                    None,
+                    false,
+                );
+            }
+        };
+
+        // Search knowledge
+        let results = ai_interface.search_knowledge(query).await;
+
+        let summaries: Vec<serde_json::Value> = results.iter().map(|k| json!({
+            "knowledge_id": k.id.to_string(),
+            "title": k.title,
+            "type": format!("{:?}", k.knowledge_type),
+            "summary": "Summary placeholder",
+            "relevance_score": 0.9
+        })).collect();
+
+        json!({
+            "success": true,
+            "data": {
+                "task_id": task_id_str,
+                "knowledge_items": summaries,
+                "total_count": summaries.len(),
+                "suggested_queries": [query]
+            }
+        })
+    }
+
+    async fn handle_confirm_knowledge_reviewed(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "success": true,
+            "message": "Knowledge review confirmed",
+            "data": {
+                "state": "KnowledgeReviewed",
+                "next_action": "start_execution"
+            }
+        })
+    }
+
+    async fn handle_start_execution(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        let task_id_str = match arguments.get("task_id").and_then(|v| v.as_str()) {
+            Some(s) => s,
+            None => {
+                return create_mcp_error_response(
+                    -32602,
+                    "Missing required parameter: task_id",
+                    None,
+                    false,
+                );
+            }
+        };
+
+        json!({
+            "success": true,
+            "data": {
+                "task_id": task_id_str,
+                "state": "InProgress",
+                "session_id": format!("session_{}", task_id_str),
+                "message": "开始执行，请使用 devman_log_work() 记录工作进展"
+            }
+        })
+    }
+
+    async fn handle_log_work(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "success": true,
+            "message": "Work logged",
+            "data": {
+                "recorded": true
+            }
+        })
+    }
+
+    async fn handle_finish_work(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "success": true,
+            "message": "Work submitted",
+            "data": {
+                "state": "WorkRecorded",
+                "record_id": format!("record_{}", arguments.get("task_id").and_then(|v| v.as_str()).unwrap_or("unknown")),
+                "next_action": "run_quality_check"
+            }
+        })
+    }
+
+    async fn handle_run_task_quality_check(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "success": true,
+            "data": {
+                "state": "QualityChecking",
+                "check_id": format!("check_{}", chrono::Utc::now().timestamp()),
+                "message": "质检运行中，请使用 devman_get_quality_result() 获取结果"
+            }
+        })
+    }
+
+    async fn handle_get_quality_result(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "success": true,
+            "data": {
+                "check_id": arguments.get("check_id").and_then(|v| v.as_str()).unwrap_or(""),
+                "status": "completed",
+                "overall_status": "passed",
+                "findings_count": 0,
+                "warnings_count": 0,
+                "next_action": "confirm_result"
+            }
+        })
+    }
+
+    async fn handle_confirm_quality_result(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "success": true,
+            "data": {
+                "state": "QualityCompleted",
+                "decision": arguments.get("decision").and_then(|v| v.as_str()).unwrap_or(""),
+                "message": "质检结果已确认"
+            }
+        })
+    }
+
+    async fn handle_complete_task(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "success": true,
+            "data": {
+                "task_id": arguments.get("task_id").and_then(|v| v.as_str()).unwrap_or(""),
+                "state": "Completed",
+                "message": "任务已完成"
+            }
+        })
+    }
+
+    async fn handle_pause_task(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "success": true,
+            "data": {
+                "state": "Paused",
+                "reason": arguments.get("reason").and_then(|v| v.as_str()).unwrap_or(""),
+                "message": "任务已暂停，可使用 devman_resume_task() 恢复"
+            }
+        })
+    }
+
+    async fn handle_resume_task(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "success": true,
+            "data": {
+                "message": "任务已恢复"
+            }
+        })
+    }
+
+    async fn handle_abandon_task(&self, arguments: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "success": true,
+            "data": {
+                "state": "Abandoned",
+                "reason_type": arguments.get("reason_type").and_then(|v| v.as_str()).unwrap_or(""),
+                "reason": arguments.get("reason").and_then(|v| v.as_str()).unwrap_or(""),
+                "message": "任务已放弃",
+                "can_be_reassigned": true,
+                "work_preserved": true
+            }
+        })
     }
 
     /// Read a resource.

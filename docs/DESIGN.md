@@ -2395,44 +2395,57 @@ AI: start_execution("task_001")  // 重新开始执行
 
 ---
 
-## MCP Server 设计
+### MCP Server 设计
 
-### MCP 协议结构
+> **当前状态**: 基础框架已完成，缺少引导性工具对接
+
+#### MCP 协议结构
 
 ```
 DevMan MCP Server
-├── Tools (可调用的工具)
-│   ├── devman_get_task_guidance       # 获取任务引导
-│   ├── devman_create_task             # 创建任务
-│   ├── devman_read_task_context       # 读取上下文
-│   ├── devman_review_knowledge        # 学习知识
+├── Tools (已实现 12 个基础工具)
+│   ├── devman_create_goal              # 创建目标
+│   ├── devman_get_goal_progress        # 获取目标进度
+│   ├── devman_create_task              # 创建任务
+│   ├── devman_list_tasks               # 列出任务
+│   ├── devman_search_knowledge         # 搜索知识库
+│   ├── devman_save_knowledge           # 保存知识
+│   ├── devman_run_quality_check        # 运行质检
+│   ├── devman_execute_tool             # 执行工具
+│   ├── devman_get_context              # 获取上下文
+│   ├── devman_list_blockers            # 列出阻塞项
+│   ├── devman_get_job_status           # 获取任务状态
+│   └── devman_cancel_job               # 取消任务
+│
+├── Tools (待实现 - 引导性工具)
+│   ├── devman_get_task_guidance        # 获取任务引导 ⭐ 核心
+│   ├── devman_read_task_context        # 读取上下文
 │   ├── devman_confirm_knowledge_reviewed # 确认知识学习
-│   ├── devman_start_execution         # 开始执行
-│   ├── devman_log_work                # 记录工作
-│   ├── devman_finish_work             # 提交工作
-│   ├── devman_run_quality_check       # 运行质检
-│   ├── devman_get_quality_result      # 获取质检结果
-│   ├── devman_confirm_quality_result  # 确认质检结果
-│   ├── devman_complete_task           # 完成任务
-│   ├── devman_pause_task              # 暂停任务
-│   ├── devman_resume_task             # 恢复任务
-│   ├── devman_abandon_task            # 放弃任务
-│   ├── devman_handle_requirement_change # 处理需求变更
-│   └── devman_list_tasks              # 列出任务
+│   ├── devman_start_execution          # 开始执行
+│   ├── devman_log_work                 # 记录工作
+│   ├── devman_finish_work              # 提交工作
+│   ├── devman_get_quality_result       # 获取质检结果
+│   ├── devman_confirm_quality_result   # 确认质检结果
+│   ├── devman_complete_task            # 完成任务
+│   ├── devman_pause_task               # 暂停任务
+│   ├── devman_resume_task              # 恢复任务
+│   ├── devman_abandon_task             # 放弃任务
+│   └── devman_handle_requirement_change # 处理需求变更
 │
-├── Resources (可读取的资源)
-│   ├── devman://task/{id}             # 任务详情
-│   ├── devman://project/current       # 当前项目
-│   ├── devman://tasks/pending         # 待处理任务
-│   ├── devman://tasks/in_progress     # 进行中任务
-│   ├── devman://knowledge/{id}        # 知识详情
-│   └── devman://quality/status/{task_id} # 质检状态
+├── Resources (部分实现)
+│   ├── devman://context/project        # 当前项目
+│   ├── devman://context/goal           # 当前目标
+│   ├── devman://tasks/queue            # 任务队列
+│   ├── devman://knowledge/recent       # 最近知识
+│   ├── devman://task/{id}              # 任务详情 (待实现)
+│   ├── devman://project/current        # 当前项目 (待实现)
+│   └── devman://quality/status/{id}    # 质检状态 (待实现)
 │
-└── Prompts (预定义提示模板)
-    ├── devman_start_new_project       # 启动新项目
-    ├── devman_implement_feature       # 实现功能
-    ├── devman_fix_bug                 # 修复 Bug
-    └── devman_handle_issue            # 处理问题
+└── Prompts (待实现)
+    ├── devman_start_new_project
+    ├── devman_implement_feature
+    ├── devman_fix_bug
+    └── devman_handle_issue
 ```
 
 ### MCP Tool 定义示例
@@ -2723,23 +2736,70 @@ devman/
 - [x] 错误处理策略
 
 ### Phase 8：AI 接口 ⚙️
-- [x] AIInterface trait
-- [ ] 任务状态机实现
-  - [ ] TaskState 枚举（10 个状态）
-  - [ ] AbandonReason（11 种原因）
-  - [ ] 状态转换校验
-- [ ] 交互式 AI 接口
-  - [ ] InteractiveAI trait
-  - [ ] 任务引导逻辑
-  - [ ] 负反馈机制
-  - [ ] 任务控制（暂停/恢复/放弃）
-  - [ ] 需求变更处理
-  - [ ] 任务重新分配
-- [ ] MCP Server 实现
-  - [ ] MCP Tool 注册（16+ 工具）
-  - [ ] MCP Resources
-  - [ ] stdio 传输
-  - [ ] Prompts 模板
+
+#### 已完成 ✅
+
+- [x] AIInterface trait - 基础 AI 接口
+- [x] InteractiveAI trait - 交互式 AI 接口定义
+- [x] TaskStateValidator - 状态校验逻辑
+- [x] TaskGuidanceGenerator - 任务引导逻辑
+- [x] MCP Server 实现 - 基础协议框架
+- [x] 12 个 MCP 工具（基础 CRUD）
+- [x] JobManager - 异步任务管理
+- [x] 资源版本控制
+
+#### 待完善/未实现 🔄
+
+- [ ] InteractiveAI trait 实现（BasicInteractiveAI 目前全是 TODO）
+- [x] 任务引导生成器（guidance.rs 已实现，但 MCP 未调用）
+- [ ] 任务状态机完整集成（TaskState 枚举已定义）
+- [ ] 负反馈机制 - MCP 返回拒绝原因和引导
+- [ ] 任务控制（暂停/恢复/放弃）- MCP 工具缺失
+- [ ] 需求变更处理 - MCP 工具缺失
+- [ ] 任务重新分配 - MCP 工具缺失
+- [x] MCP Prompts 模板 - 需要定义
+- [ ] MCP Resources 完整实现 - 当前返回占位数据
+
+#### 当前 MCP 工具状态
+
+```bash
+# 已实现（基础 CRUD）
+devman_create_goal          ✅
+devman_get_goal_progress    ✅
+devman_create_task          ⚠️ (占位符)
+devman_list_tasks           ✅
+devman_search_knowledge     ✅
+devman_save_knowledge       ⚠️ (占位符)
+devman_run_quality_check    ✅
+devman_execute_tool         ⚠️ (占位符)
+devman_get_context          ✅
+devman_list_blockers        ✅
+devman_get_job_status       ✅
+devman_cancel_job           ✅
+
+# 待添加（引导性工具）
+devman_get_task_guidance    ⬜
+devman_read_task_context    ⬜
+devman_confirm_knowledge_reviewed  ⬜
+devman_start_execution      ⬜
+devman_log_work             ⬜
+devman_finish_work          ⬜
+devman_get_quality_result   ⬜
+devman_confirm_quality_result  ⬜
+devman_complete_task        ⬜
+devman_pause_task           ⬜
+devman_resume_task          ⬜
+devman_abandon_task         ⬜
+devman_handle_requirement_change  ⬜
+```
+
+### 当前实现 vs 设计文档的差异
+
+1. **InteractiveAI 已定义但未完整实现** - BasicInteractiveAI 中大部分方法返回占位符
+2. **guidance.rs 已实现但 MCP 未调用** - TaskGuidanceGenerator 完整可用
+3. **validation.rs 已实现** - TaskStateValidator 包含完整的状态转换校验
+4. **MCP 缺少引导性工具** - 设计文档要求 16+ 工具，当前只有 12 个基础工具
+5. **资源实现是占位符** - read_resource() 返回空数据
 - 业务质检扩展
 - 人机协作
 - 向量检索

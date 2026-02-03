@@ -129,6 +129,8 @@ MCP Server 提供以下工具供 AI Assistant 调用：
 | `devman_get_job_status` | 获取异步任务状态 |
 | `devman_cancel_job` | 取消异步任务 |
 
+**详细 API 文档请参阅** [docs/MCP_API.md](./docs/MCP_API.md)
+
 ---
 
 ## 开发与测试 🔧
@@ -177,6 +179,7 @@ MCP Server 实现后，下一步工作：
 - 质检指南：`docs/QUALITY_GUIDE.md`
 - 知识管理：`docs/KNOWLEDGE.md`
 - 架构详解：`docs/ARCHITECTURE.md`
+- MCP Server API：`docs/MCP_API.md`
 - MCP Server 设计：`docs/plans/2026-02-02-mcp-server-design.md`
 
 欢迎提交 issue 或 PR！
