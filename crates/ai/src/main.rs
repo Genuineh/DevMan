@@ -7,8 +7,6 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use devman_ai::mcp_server::McpServer;
 use devman_ai::mcp_server::McpServerConfig;
-use tracing::Level;
-use tracing_subscriber::fmt;
 
 #[derive(Parser)]
 #[command(name = "devman-ai")]
@@ -43,11 +41,7 @@ enum Commands {
 fn init_logging(_to_stderr: bool) {
     // Disable all logging to avoid interfering with MCP protocol
     // VSCode MCP extension captures both stdout and stderr
-    // Only enable ERROR level logging to stderr (won't affect MCP communication)
-    tracing_subscriber::fmt()
-        .with_max_level(Level::ERROR)
-        .with_target(false)
-        .init();
+    // No tracing initialization - all macros become no-ops
 }
 
 #[tokio::main]
