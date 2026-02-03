@@ -16,3 +16,4 @@ pub use interactive::{InteractiveAI, BasicInteractiveAI};
 pub use validation::{TaskStateValidator, TransitionContext, WorkLogStorage, WorkLogEntry, CommandExecutionRecord};
 pub use guidance::{TaskGuidanceGenerator, TaskGuidanceInfo, GuidanceContext};
 pub use job_manager::{JobManager, InMemoryJobManager, JobId, Job, JobStatus, JobType, JobError, JobStatusResponse, CreateJobRequest, JobFilter, error_codes};
+pub use mcp_server::{McpServer, McpServerConfig, McpTool, McpResource, MCP_VERSION};

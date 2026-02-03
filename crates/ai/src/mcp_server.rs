@@ -148,15 +148,15 @@ pub struct McpError {
 /// DevMan MCP server.
 pub struct McpServer {
     /// Configuration
-    config: McpServerConfig,
+    pub config: McpServerConfig,
     /// Whether server is running
-    running: bool,
+    pub running: bool,
     /// Registered tools
-    tools: HashMap<String, McpTool>,
+    pub tools: HashMap<String, McpTool>,
     /// Registered resources
-    resources: HashMap<String, McpResource>,
+    pub resources: HashMap<String, McpResource>,
     /// AI interface reference
-    ai_interface: Option<Arc<dyn AIInterface>>,
+    pub ai_interface: Option<Arc<dyn AIInterface>>,
     /// Job manager for async tasks
     job_manager: Option<Arc<dyn JobManager>>,
     /// Storage path for resources

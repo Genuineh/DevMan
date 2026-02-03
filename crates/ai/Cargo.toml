@@ -6,6 +6,10 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 
+[[bin]]
+name = "devman-ai"
+path = "src/main.rs"
+
 [dependencies]
 devman-core = { workspace = true }
 devman-storage = { workspace = true }
@@ -23,6 +27,8 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 ulid = { workspace = true, features = ["serde"] }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
 
 [dev-dependencies]
 futures = "0.3"
