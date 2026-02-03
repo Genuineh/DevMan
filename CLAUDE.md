@@ -12,7 +12,7 @@ DevMan is an AI cognitive work management system - an external brain + project m
 - Extensible QualityEngine with generic and custom checks
 - Knowledge service with retrieval and templates
 - Progress tracking with blocker detection and time estimation
-- MCP Server for AI interface (protocol layer complete, business logic in progress)
+- MCP Server for AI interface (12 tools, 4 resources, async JobManager)
 
 ## Build & Test Commands
 
@@ -81,7 +81,7 @@ Layer 1: Storage & State      (storage crate)
 | `devman-progress` | Progress tracking | ProgressTracker, BlockerDetector |
 | `devman-work` | Work execution | WorkManager, WorkflowExecutor |
 | `devman-tools` | Tool abstraction | Tool trait, BuiltinToolExecutor |
-| `devman-ai` | AI interface | AIInterface, MCP Server |
+| `devman-ai` | AI interface | AIInterface, JobManager, MCP Server (12 tools, 4 resources) |
 | `devman-cli` | CLI entrypoint | Command handlers |
 
 ## Data Flow for Task Execution
@@ -125,3 +125,30 @@ Example: `feat(quality): add security scan checker`
 - Knowledge management: `docs/KNOWLEDGE.md`
 - Contributing: `docs/CONTRIBUTING.md`
 - Current roadmap: `docs/TODO.md`
+- MCP Server design: `docs/plans/2026-02-02-mcp-server-design.md`
+
+## MCP Server Tools
+
+| Tool | Description |
+|------|-------------|
+| `devman_create_goal` | Create a new goal |
+| `devman_get_goal_progress` | Get goal progress |
+| `devman_create_task` | Create a new task |
+| `devman_list_tasks` | List tasks with filters |
+| `devman_search_knowledge` | Search knowledge base |
+| `devman_save_knowledge` | Save knowledge |
+| `devman_run_quality_check` | Run quality checks |
+| `devman_execute_tool` | Execute tools (cargo, git, npm, fs) |
+| `devman_get_context` | Get current context |
+| `devman_list_blockers` | List blockers |
+| `devman_get_job_status` | Get async job status |
+| `devman_cancel_job` | Cancel async job |
+
+## MCP Server Resources
+
+| Resource URI | Description |
+|--------------|-------------|
+| `devman://context/project` | Current project context |
+| `devman://context/goal` | Active goal and progress |
+| `devman://tasks/queue` | Task queue |
+| `devman://knowledge/recent` | Recent knowledge |
