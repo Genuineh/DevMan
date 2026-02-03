@@ -37,8 +37,79 @@ fn create_mcp_error_response(
     })
 }
 
-/// MCP Protocol version
-pub const MCP_VERSION: &str = "2024-11-05";
+/// JSON-RPC 2.0 Request wrapper
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRpcRequest {
+    #[serde(default)]
+    pub jsonrpc: String,
+    #[serde(default)]
+    pub id: Option<serde_json::Value>,
+    #[serde(default)]
+    pub method: String,
+    #[serde(default)]
+    pub params: serde_json::Value,
+}
+
+/// JSON-RPC 2.0 Response wrapper
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRpcResponse {
+    #[serde(default)]
+    pub jsonrpc: String,
+    #[serde(default)]
+    pub id: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<JsonRpcError>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRpcError {
+    pub code: i32,
+    pub message: String,
+    #[serde(default)]
+    pub data: Option<serde_json::Value>,
+}
+
+impl JsonRpcResponse {
+    fn error(id: Option<serde_json::Value>, code: i32, message: &str) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            id,
+            result: None,
+            error: Some(JsonRpcError {
+                code,
+                message: message.to_string(),
+                data: None,
+            }),
+        }
+    }
+
+    fn success(id: Option<serde_json::Value>, result: serde_json::Value) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            id,
+            result: Some(result),
+            error: None,
+        }
+    }
+}
+
+/// Parse a JSON-RPC request and extract the method and params
+fn parse_json_rpc_request(line: &str) -> Result<(Option<serde_json::Value>, String, serde_json::Value), String> {
+    let request: JsonRpcRequest = serde_json::from_str(line)
+        .map_err(|e| format!("Parse error: {}", e))?;
+
+    if request.jsonrpc != "2.0" {
+        return Err("Invalid JSON-RPC version".to_string());
+    }
+
+    if request.method.is_empty() {
+        return Err("Missing method".to_string());
+    }
+
+    Ok((request.id, request.method, request.params))
+}
 
 /// DevMan MCP server configuration.
 #[derive(Debug, Clone)]
@@ -652,71 +723,59 @@ impl McpServer {
     }
 
     /// Handle an MCP request.
-    async fn handle_request(&self, request: McpRequest, id: Option<String>) -> McpResponse {
-        match request {
-            McpRequest::Initialize { protocol_version, capabilities: _ } => {
-                debug!("MCP Initialize request - version: {}", protocol_version);
-                McpResponse {
-                    id,
-                    result: Some(json!({
-                        "protocolVersion": protocol_version,
-                        "capabilities": {
-                            "tools": json!({}),
-                            "resources": json!({})
-                        },
-                        "serverInfo": {
-                            "name": self.config.server_name,
-                            "version": self.config.version
-                        }
-                    })),
-                    error: None,
-                }
+    async fn handle_request(&self, method: &str, params: &serde_json::Value) -> serde_json::Value {
+        match method {
+            "initialize" => {
+                // Extract protocol version from params
+                let protocol_version = params.get("protocolVersion")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("2024-11-05");
+
+                json!({
+                    "protocolVersion": protocol_version,
+                    "capabilities": {
+                        "tools": json!({}),
+                        "resources": json!({})
+                    },
+                    "serverInfo": {
+                        "name": self.config.server_name,
+                        "version": self.config.version
+                    }
+                })
             }
 
-            McpRequest::ToolsList => {
+            "tools/list" => {
                 let tools: Vec<_> = self.tools.values().cloned().collect();
-                McpResponse {
-                    id,
-                    result: Some(json!({ "tools": tools })),
-                    error: None,
-                }
+                json!({ "tools": tools })
             }
 
-            McpRequest::ToolsCall { name, arguments } => {
-                debug!("Tool call: {} with args: {:?}", name, arguments);
-                let result = self.execute_tool(&name, arguments).await;
-                McpResponse {
-                    id,
-                    result: Some(result),
-                    error: None,
-                }
+            "tools/call" => {
+                let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
+                self.execute_tool(name, arguments).await
             }
 
-            McpRequest::ResourcesList => {
+            "resources/list" => {
                 let resources: Vec<_> = self.resources.values().cloned().collect();
-                McpResponse {
-                    id,
-                    result: Some(json!({ "resources": resources })),
-                    error: None,
-                }
+                json!({ "resources": resources })
             }
 
-            McpRequest::ResourcesRead { uri } => {
-                debug!("Resource read: {}", uri);
-                let result = self.read_resource(&uri).await;
-                McpResponse {
-                    id,
-                    result: Some(result),
-                    error: None,
-                }
+            "resources/read" => {
+                let uri = params.get("uri").and_then(|v| v.as_str()).unwrap_or("");
+                self.read_resource(uri).await
             }
 
-            McpRequest::Ping => {
-                McpResponse {
-                    id,
-                    result: Some(json!({ "status": "pong" })),
-                    error: None,
-                }
+            "ping" => {
+                json!({ "status": "pong" })
+            }
+
+            _ => {
+                create_mcp_error_response(
+                    -32601,
+                    &format!("Unknown method: {}", method),
+                    None,
+                    false,
+                )
             }
         }
     }
@@ -1467,8 +1526,6 @@ impl McpServer {
 
     /// Start with stdio transport.
     async fn start_with_stdio(&mut self) -> anyhow::Result<()> {
-        info!("Starting DevMan MCP Server v{} (stdio transport)", self.config.version);
-
         let stdin = BufReader::new(tokio::io::stdin());
         let mut lines = stdin.lines();
         let mut stdout = BufWriter::new(tokio::io::stdout());
@@ -1476,68 +1533,48 @@ impl McpServer {
         self.running = true;
 
         while let Some(line_result) = lines.next_line().await? {
-            // Parse the message
+            // Parse JSON-RPC request
             if line_result.trim().is_empty() {
                 continue;
             }
 
-            let request: McpRequest = match serde_json::from_str(&line_result) {
-                Ok(req) => req,
+            let (id, method, params) = match parse_json_rpc_request(&line_result) {
+                Ok(result) => result,
                 Err(e) => {
-                    error!("Failed to parse request: {}", e);
-                    let error_response = McpResponse {
-                        id: None,
-                        result: None,
-                        error: Some(McpError {
-                            code: -32700,
-                            message: format!("Parse error: {}", e),
-                            data: None,
-                        }),
-                    };
+                    let error_response = JsonRpcResponse::error(None, -32700, &e);
                     let error_json = serde_json::to_string(&error_response)
                         .unwrap_or_else(|_| "{}".to_string());
-                    if let Err(e) = stdout.write_all(error_json.as_bytes()).await {
-                        error!("Failed to write error response: {}", e);
-                        break;
-                    }
-                    if let Err(e) = stdout.write_all(b"\n").await {
-                        error!("Failed to write newline: {}", e);
-                        break;
-                    }
-                    if let Err(e) = stdout.flush().await {
-                        error!("Failed to flush: {}", e);
-                    }
+                    if let Err(_) = stdout.write_all(error_json.as_bytes()).await { break; }
+                    if let Err(_) = stdout.write_all(b"\n").await { break; }
+                    if let Err(_) = stdout.flush().await { break; }
                     continue;
                 }
             };
 
             // Handle the request
-            let response = self.handle_request(request, None).await;
+            let result = self.handle_request(&method, &params).await;
+
+            // Check if result is an error
+            let response = if let Some(error) = result.get("error") {
+                JsonRpcResponse::error(id, error.get("code").and_then(|v| v.as_i64()).unwrap_or(-32000) as i32, error.get("message").and_then(|v| v.as_str()).unwrap_or("Unknown error"))
+            } else {
+                JsonRpcResponse::success(id, result)
+            };
+
             let response_json = serde_json::to_string(&response)
                 .unwrap_or_else(|_| "{}".to_string());
 
-            if let Err(e) = stdout.write_all(response_json.as_bytes()).await {
-                error!("Failed to write response: {}", e);
-                break;
-            }
-            if let Err(e) = stdout.write_all(b"\n").await {
-                error!("Failed to write newline: {}", e);
-                break;
-            }
-            if let Err(e) = stdout.flush().await {
-                error!("Failed to flush: {}", e);
-            }
+            if let Err(_) = stdout.write_all(response_json.as_bytes()).await { break; }
+            if let Err(_) = stdout.write_all(b"\n").await { break; }
+            if let Err(_) = stdout.flush().await { break; }
         }
 
         self.running = false;
-        info!("MCP Server stopped");
         Ok(())
     }
 
     /// Start with Unix socket transport.
     pub async fn start_with_socket(&mut self, socket_path: &std::path::Path) -> anyhow::Result<()> {
-        info!("Starting DevMan MCP Server v{} (socket transport)", self.config.version);
-
         // Remove existing socket file
         if socket_path.exists() {
             std::fs::remove_file(socket_path)?;
@@ -1553,8 +1590,8 @@ impl McpServer {
                         Ok((stream, _)) => {
                             self.handle_connection(stream).await?;
                         }
-                        Err(e) => {
-                            error!("Failed to accept connection: {}", e);
+                        Err(_) => {
+                            // Connection error, continue
                         }
                     }
                 }
@@ -1565,7 +1602,6 @@ impl McpServer {
         }
 
         self.running = false;
-        info!("MCP Server stopped");
         Ok(())
     }
 
@@ -1580,26 +1616,31 @@ impl McpServer {
                 continue;
             }
 
-            let request: McpRequest = match serde_json::from_str(&line_result) {
-                Ok(req) => req,
+            let (id, method, params) = match parse_json_rpc_request(&line_result) {
+                Ok(result) => result,
                 Err(e) => {
-                    error!("Failed to parse request: {}", e);
+                    let error_response = JsonRpcResponse::error(None, -32700, &e);
+                    let error_json = serde_json::to_string(&error_response)
+                        .unwrap_or_else(|_| "{}".to_string());
+                    if let Err(_) = writer.write_all(error_json.as_bytes()).await { break; }
+                    if let Err(_) = writer.write_all(b"\n").await { break; }
                     continue;
                 }
             };
 
-            let response = self.handle_request(request, None).await;
+            let result = self.handle_request(&method, &params).await;
+
+            let response = if let Some(error) = result.get("error") {
+                JsonRpcResponse::error(id, error.get("code").and_then(|v| v.as_i64()).unwrap_or(-32000) as i32, error.get("message").and_then(|v| v.as_str()).unwrap_or("Unknown error"))
+            } else {
+                JsonRpcResponse::success(id, result)
+            };
+
             let response_json = serde_json::to_string(&response)
                 .unwrap_or_else(|_| "{}".to_string());
 
-            if let Err(e) = writer.write_all(response_json.as_bytes()).await {
-                error!("Failed to write response: {}", e);
-                break;
-            }
-            if let Err(e) = writer.write_all(b"\n").await {
-                error!("Failed to write newline: {}", e);
-                break;
-            }
+            if let Err(_) = writer.write_all(response_json.as_bytes()).await { break; }
+            if let Err(_) = writer.write_all(b"\n").await { break; }
         }
 
         Ok(())
