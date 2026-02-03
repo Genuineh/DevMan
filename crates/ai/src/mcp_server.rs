@@ -1689,76 +1689,39 @@ mod tests {
     }
 
     #[test]
-    fn test_mcp_error_definition() {
-        let error = McpError {
-            code: -32600,
-            message: "Invalid request".to_string(),
-            data: None,
-        };
+    fn test_json_rpc_request_parse() {
+        let json = r#"{"jsonrpc": "2.0", "id": "1", "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {}}}"#;
+        let (id, method, params) = parse_json_rpc_request(json).unwrap();
 
-        assert_eq!(error.code, -32600);
-        assert_eq!(error.message, "Invalid request");
+        assert_eq!(id, Some(serde_json::json!("1")));
+        assert_eq!(method, "initialize");
+        assert_eq!(params.get("protocolVersion").and_then(|v| v.as_str()), Some("2024-11-05"));
     }
 
     #[test]
-    fn test_mcp_request_initialize() {
-        let request = McpRequest::Initialize {
-            protocol_version: MCP_VERSION.to_string(),
-            capabilities: json!({}),
-        };
-
-        match request {
-            McpRequest::Initialize { protocol_version, .. } => {
-                assert_eq!(protocol_version, MCP_VERSION);
-            }
-            _ => panic!("Wrong variant"),
-        }
+    fn test_json_rpc_request_missing_version() {
+        let json = r#"{"method": "ping"}"#;
+        let result = parse_json_rpc_request(json);
+        assert!(result.is_err());
     }
 
     #[test]
-    fn test_mcp_request_tools_call() {
-        let request = McpRequest::ToolsCall {
-            name: "test_tool".to_string(),
-            arguments: json!({ "param": "value" }),
-        };
-
-        match request {
-            McpRequest::ToolsCall { name, arguments } => {
-                assert_eq!(name, "test_tool");
-                assert_eq!(arguments["param"], "value");
-            }
-            _ => panic!("Wrong variant"),
-        }
-    }
-
-    #[test]
-    fn test_mcp_response_success() {
-        let response = McpResponse {
-            id: Some("1".to_string()),
-            result: Some(json!({ "status": "ok" })),
-            error: None,
-        };
-
-        assert_eq!(response.id, Some("1".to_string()));
+    fn test_json_rpc_response_success() {
+        let response = JsonRpcResponse::success(Some(serde_json::json!("1")), json!({"status": "ok"}));
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(serde_json::json!("1")));
         assert!(response.result.is_some());
         assert!(response.error.is_none());
     }
 
     #[test]
-    fn test_mcp_response_error() {
-        let response = McpResponse {
-            id: Some("2".to_string()),
-            result: None,
-            error: Some(McpError {
-                code: -32601,
-                message: "Method not found".to_string(),
-                data: None,
-            }),
-        };
-
-        assert_eq!(response.id, Some("2".to_string()));
+    fn test_json_rpc_response_error() {
+        let response = JsonRpcResponse::error(Some(serde_json::json!("2")), -32601, "Method not found");
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(serde_json::json!("2")));
         assert!(response.result.is_none());
         assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32601);
     }
 
     #[test]
