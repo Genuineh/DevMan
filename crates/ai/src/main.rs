@@ -8,6 +8,7 @@ use clap::{Parser, Subcommand};
 use devman_ai::mcp_server::McpServer;
 use devman_ai::mcp_server::McpServerConfig;
 use tracing::{info, Level};
+use tracing_subscriber::fmt;
 
 #[derive(Parser)]
 #[command(name = "devman-ai")]
@@ -29,7 +30,6 @@ enum Commands {
     /// Start MCP Server with Unix socket
     Socket {
         /// Socket path
-        #[arg(short, long, default_value = "/tmp/devman.sock")]
         path: std::path::PathBuf,
     },
 
@@ -40,12 +40,24 @@ enum Commands {
     Info,
 }
 
+fn init_logging(to_stderr: bool) {
+    if to_stderr {
+        // Socket mode: disable logging entirely to avoid interfering with MCP protocol
+        // The VSCode MCP extension captures both stdout and stderr
+        tracing_subscriber::fmt()
+            .with_max_level(Level::ERROR)
+            .with_writer(std::io::sink)
+            .init();
+    } else {
+        // Stdio/info mode: log to stdout
+        fmt::Subscriber::builder()
+            .with_max_level(Level::INFO)
+            .init();
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .init();
-
     let cli = Cli::parse();
 
     // Create storage path
@@ -62,16 +74,19 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Stdio => {
+            init_logging(false);
             info!("Starting DevMan MCP Server (stdio mode)");
             server.start().await?;
         }
 
         Commands::Socket { path } => {
+            init_logging(true);
             info!("Starting DevMan MCP Server (socket mode)");
             server.start_with_socket(&path).await?;
         }
 
         Commands::ListTools => {
+            init_logging(false);
             let tools: Vec<_> = server.tools.values().collect();
             println!("Available tools ({}):", tools.len());
             for tool in tools {
@@ -80,6 +95,7 @@ async fn main() -> Result<()> {
         }
 
         Commands::Info => {
+            init_logging(false);
             println!("DevMan MCP Server v{}", env!("CARGO_PKG_VERSION"));
             println!("Protocol: MCP 2024-11-05");
             println!("Transport: stdio / Unix socket");
