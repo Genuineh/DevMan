@@ -12,7 +12,7 @@ pub mod gate;
 pub mod human;
 pub mod parser;
 
-pub use engine::QualityEngine;
+pub use engine::{QualityEngine, BasicQualityEngine};
 pub use checks::{
     GenericCheckType, QualityCheckType, CustomCheckSpec,
     CommandSpec, ValidationSpec, OutputParser, MetricExtractor,

@@ -11,7 +11,7 @@ pub mod guidance;
 pub mod mcp_server;
 pub mod job_manager;
 
-pub use r#interface::{AIInterface, GoalSpec, GoalFilter, TaskFilter};
+pub use r#interface::{AIInterface, GoalSpec, GoalFilter, TaskFilter, BasicAIInterface};
 pub use interactive::{InteractiveAI, BasicInteractiveAI};
 pub use validation::{TaskStateValidator, TransitionContext, WorkLogStorage, WorkLogEntry, CommandExecutionRecord};
 pub use guidance::{TaskGuidanceGenerator, TaskGuidanceInfo, GuidanceContext};

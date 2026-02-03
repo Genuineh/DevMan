@@ -8,6 +8,6 @@ pub mod manager;
 pub mod context;
 pub mod executor;
 
-pub use manager::{WorkManager, TaskSpec, Executor};
+pub use manager::{WorkManager, TaskSpec, Executor, BasicWorkManager};
 pub use context::WorkManagementContext;
 pub use executor::TaskExecutor;

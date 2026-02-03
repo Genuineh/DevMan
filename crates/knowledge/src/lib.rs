@@ -8,4 +8,4 @@ pub mod service;
 pub mod template;
 pub mod classification;
 
-pub use service::KnowledgeService;
+pub use service::{KnowledgeService, BasicKnowledgeService};

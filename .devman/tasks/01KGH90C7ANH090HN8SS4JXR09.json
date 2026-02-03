@@ -1,0 +1,31 @@
+{
+  "id": "01KGH90C7ANH090HN8SS4JXR09",
+  "title": "Test task",
+  "description": "This is a test task",
+  "intent": {
+    "natural_language": "This is a test task",
+    "context": {
+      "relevant_knowledge": [],
+      "similar_tasks": [],
+      "affected_files": []
+    },
+    "success_criteria": []
+  },
+  "steps": [],
+  "inputs": [],
+  "expected_outputs": [],
+  "quality_gates": [],
+  "status": "Queued",
+  "progress": {
+    "percentage": 0.0,
+    "current_step": null,
+    "total_steps": 0,
+    "message": ""
+  },
+  "phase_id": "01KGH90C7ASQKCM0KGD8PTXNRF",
+  "depends_on": [],
+  "blocks": [],
+  "work_records": [],
+  "created_at": "2026-02-03T08:13:21.002857760Z",
+  "updated_at": "2026-02-03T08:13:21.002858061Z"
+}

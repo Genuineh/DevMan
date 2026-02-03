@@ -70,6 +70,13 @@ Layer 1: Storage & State       (存储与状态)
   - [x] 测试 stdio 和 unix socket 传输
   - [x] 测试同步/异步执行模式
   - [x] 测试错误处理和资源版本化
+  - [x] **E2E 测试** (6 个测试用例)
+    - [x] `test_e2e_create_and_list_task` - 创建和列出任务
+    - [x] `test_e2e_task_workflow` - 完整任务工作流
+    - [x] `test_e2e_create_multiple_tasks` - 创建多个任务
+    - [x] `test_e2e_create_task_with_phase` - 带阶段的任务创建
+    - [x] `test_e2e_search_knowledge` - 知识搜索
+    - [x] `test_e2e_get_goal_progress_no_goal` - 获取目标进度（无目标）
 
 ---
 
