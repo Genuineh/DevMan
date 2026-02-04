@@ -202,6 +202,115 @@ let results = vector_service.search_by_vector("error handling", 10, 0.75).await?
 
 ## 待规划功能
 
+### feat: Reranker 重排序支持 - 检索质量优化
+
+**背景**：
+- 向量搜索基于语义相似性，但可能遗漏细粒度相关性
+- 需要 reranker 模型对候选结果进行精排
+- Qwen3-Reranker-0.6B 专为重排序设计，推理开销小
+
+**方案**：
+
+#### 1. 两阶段检索架构
+```
+Query → 向量检索 (Top 50) → Reranker 重排序 → Top 10
+```
+
+#### 2. Reranker 模型集成
+```rust
+pub enum RerankerModel {
+    /// Qwen3 Reranker (Ollama local)
+    Qwen3Reranker0_6B,
+    /// OpenAI text-embedding-3-small (reranking endpoint)
+    OpenAIReranker,
+    /// Custom Ollama model
+    Ollama { name: String },
+}
+
+/// Ollama Reranker Client
+pub struct OllamaRerankerClient {
+    client: Client,
+    url: String,
+    model: String,
+}
+
+impl OllamaRerankerClient {
+    /// Rerank documents given a query
+    /// Returns scores for each document
+    pub async fn rerank(
+        &self,
+        query: &str,
+        documents: &[String],
+    ) -> Result<Vec<f32>> {
+        // Ollama /api/rerank endpoint or use embeddings + cross-encoding
+    }
+}
+```
+
+#### 3. 配置扩展
+```rust
+pub struct RerankerConfig {
+    /// Enable reranking
+    pub enabled: bool,
+    /// Reranker model
+    pub model: RerankerModel,
+    /// Ollama server URL
+    pub ollama_url: String,
+    /// Max candidates to rerank (after vector search)
+    pub max_candidates: usize,
+    /// Final top-k results after reranking
+    pub final_top_k: usize,
+}
+
+impl Default for RerankerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            model: RerankerModel::Qwen3Reranker0_6B,
+            ollama_url: "http://localhost:11434".to_string(),
+            max_candidates: 50,
+            final_top_k: 10,
+        }
+    }
+}
+```
+
+#### 4. 混合搜索 API
+```rust
+#[async_trait]
+pub trait HybridKnowledgeService: Send + Sync {
+    /// Hybrid search with vector + reranking
+    async fn search_hybrid(
+        &self,
+        query: &str,
+        vector_top_k: usize,      // Vector search candidates
+        rerank_top_k: usize,      // Final results after reranking
+    ) -> Result<Vec<ScoredKnowledge>>;
+}
+```
+
+#### 5. RRF 融合（备选方案）
+如果 Ollama 不支持 reranking endpoint，可使用 Reciprocal Rank Fusion：
+```rust
+fn rrf_fuse(
+    vector_results: &[ScoredKnowledge],
+    keyword_results: &[Knowledge],
+    k: u32,
+) -> Vec<ScoredKnowledge> {
+    // Combine results from different retrieval methods
+}
+```
+
+**优先级**：中 - 向量搜索已可用，reranking 是优化增强
+
+**依赖**：
+- [Qwen3 Reranker](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B)
+- Ollama rerank API 或交叉编码方式
+
+---
+
+## 待规划功能
+
 #### 2. 数据模型扩展
 ```rust
 pub struct KnowledgeEmbedding {
