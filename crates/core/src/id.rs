@@ -180,6 +180,15 @@ impl std::fmt::Display for KnowledgeId {
     }
 }
 
+impl std::str::FromStr for KnowledgeId {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<Ulid>()
+            .map(KnowledgeId)
+            .map_err(|e| format!("Invalid KnowledgeId: {}", e))
+    }
+}
+
 /// Unique identifier for a QualityCheck
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct QualityCheckId(pub Ulid);

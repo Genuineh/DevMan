@@ -9,7 +9,7 @@ use std::sync::Arc;
 use devman_core::{
     Goal, GoalId, Project, ProjectId, Phase, PhaseId, Task, TaskId, TaskFilter,
     Event, EventId, Knowledge, KnowledgeId, QualityCheck, QualityCheckId,
-    WorkRecord, WorkRecordId,
+    WorkRecord, WorkRecordId, KnowledgeEmbedding,
 };
 use super::{Storage, StorageError, Result};
 use tokio::fs;
@@ -34,6 +34,7 @@ impl JsonStorage {
         fs::create_dir_all(root.join("tasks")).await?;
         fs::create_dir_all(root.join("events")).await?;
         fs::create_dir_all(root.join("knowledge")).await?;
+        fs::create_dir_all(root.join("embeddings")).await?;
         fs::create_dir_all(root.join("quality")).await?;
         fs::create_dir_all(root.join("work_records")).await?;
 
@@ -70,6 +71,9 @@ impl JsonStorage {
     }
     fn knowledge_path(&self, id: KnowledgeId) -> std::path::PathBuf {
         self.root.join("knowledge").join(format!("{}.json", id))
+    }
+    fn embedding_path(&self, knowledge_id: &str) -> std::path::PathBuf {
+        self.root.join("embeddings").join(format!("{}.json", knowledge_id))
     }
     fn quality_check_path(&self, id: QualityCheckId) -> std::path::PathBuf {
         self.root.join("quality").join(format!("{}.json", id))
@@ -248,6 +252,24 @@ impl Storage for JsonStorage {
 
     async fn list_knowledge(&self) -> Result<Vec<Knowledge>> {
         list_dir(&self.root.join("knowledge")).await
+    }
+
+    // === Vector Embedding operations ===
+
+    async fn save_vector_embedding(&mut self, embedding: &KnowledgeEmbedding) -> Result<()> {
+        let path = self.embedding_path(&embedding.knowledge_id.to_string());
+        let json = serde_json::to_string_pretty(embedding)?;
+        fs::write(&path, json.as_bytes()).await?;
+        self.set_pending().await;
+        Ok(())
+    }
+
+    async fn load_vector_embedding(&self, knowledge_id: &str) -> Result<Option<KnowledgeEmbedding>> {
+        read_json(&self.embedding_path(knowledge_id)).await
+    }
+
+    async fn list_vector_embeddings(&self) -> Result<Vec<KnowledgeEmbedding>> {
+        list_dir(&self.root.join("embeddings")).await
     }
 
     async fn save_quality_check(&mut self, check: &QualityCheck) -> Result<()> {

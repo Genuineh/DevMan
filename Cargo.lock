@@ -284,6 +284,7 @@ dependencies = [
  "devman-core",
  "devman-storage",
  "regex",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror",

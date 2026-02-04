@@ -178,3 +178,86 @@ pub struct Feedback {
 
 // Export type alias for compatibility
 pub type KnowledgeUpdate = ();
+
+/// Embedding model type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EmbeddingModel {
+    /// Qwen3 Embedding (Ollama local)
+    Qwen3Embedding0_6B,
+    /// OpenAI text-embedding-ada-002
+    OpenAIAda002,
+    /// Custom model via Ollama
+    Ollama { name: String },
+}
+
+/// Configuration for vector search.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VectorSearchConfig {
+    /// Enable vector search
+    pub enabled: bool,
+
+    /// Embedding model to use
+    pub model: EmbeddingModel,
+
+    /// Ollama server URL (for local models)
+    #[serde(default = "default_ollama_url")]
+    pub ollama_url: String,
+
+    /// Embedding dimension
+    #[serde(default = "default_dimension")]
+    pub dimension: usize,
+
+    /// Similarity threshold (0.0 - 1.0)
+    #[serde(default = "default_threshold")]
+    pub threshold: f32,
+}
+
+fn default_ollama_url() -> String {
+    "http://localhost:11434".to_string()
+}
+
+fn default_dimension() -> usize {
+    1024 // Qwen3-Embedding-0.6B dimension
+}
+
+fn default_threshold() -> f32 {
+    0.75
+}
+
+impl Default for VectorSearchConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            model: EmbeddingModel::Qwen3Embedding0_6B,
+            ollama_url: default_ollama_url(),
+            dimension: default_dimension(),
+            threshold: default_threshold(),
+        }
+    }
+}
+
+/// Knowledge embedding cache - stores pre-computed embeddings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeEmbedding {
+    /// Knowledge ID
+    pub knowledge_id: KnowledgeId,
+
+    /// The embedding vector
+    pub embedding: Vec<f32>,
+
+    /// Model used to generate this embedding
+    pub model: EmbeddingModel,
+
+    /// When this embedding was generated
+    #[serde(default)]
+    pub created_at: Time,
+}
+
+/// A knowledge item with its similarity score.
+#[derive(Debug, Clone)]
+pub struct ScoredKnowledge {
+    /// The knowledge item
+    pub knowledge: Knowledge,
+    /// Similarity score (0.0 - 1.0, higher is more similar)
+    pub score: f32,
+}

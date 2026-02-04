@@ -51,6 +51,7 @@ pub use event::Event;
 pub use knowledge::{
     Knowledge, KnowledgeType, KnowledgeContent, KnowledgeMetadata,
     UsageStats, Feedback, CodeSnippet, TemplateContent, TemplateParameter,
+    EmbeddingModel, VectorSearchConfig, KnowledgeEmbedding, ScoredKnowledge,
 };
 pub use quality::{
     QualityCheck, QualityCheckType, GenericCheckType, CustomCheckSpec,

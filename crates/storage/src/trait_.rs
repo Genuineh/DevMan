@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use devman_core::{
     Goal, GoalId, Project, ProjectId, Phase, PhaseId, Task, TaskId, TaskFilter,
     Event, EventId, Knowledge, KnowledgeId, QualityCheck, QualityCheckId,
-    WorkRecord, WorkRecordId, Blocker, BlockerId,
+    WorkRecord, WorkRecordId, Blocker, BlockerId, KnowledgeEmbedding,
 };
 
 /// Error type for storage operations.
@@ -99,6 +99,17 @@ pub trait Storage: Send + Sync {
 
     /// List all knowledge.
     async fn list_knowledge(&self) -> Result<Vec<Knowledge>>;
+
+    // === Vector Embedding operations ===
+
+    /// Save a knowledge embedding.
+    async fn save_vector_embedding(&mut self, embedding: &KnowledgeEmbedding) -> Result<()>;
+
+    /// Load a knowledge embedding by knowledge ID.
+    async fn load_vector_embedding(&self, knowledge_id: &str) -> Result<Option<KnowledgeEmbedding>>;
+
+    /// List all knowledge embeddings.
+    async fn list_vector_embeddings(&self) -> Result<Vec<KnowledgeEmbedding>>;
 
     // === Quality Check operations ===
 

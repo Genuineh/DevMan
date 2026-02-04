@@ -144,22 +144,63 @@ devman/
 
 ---
 
-## 待规划功能
+## 已完成功能
 
-### feat: 向量检索支持知识服务 - 语义搜索能力
+### feat: 向量检索支持知识服务 - 语义搜索能力 ✅
 
 **GitHub Issue**: #3
 
-**背景**：
-- 当前知识服务基于关键词搜索，无法理解语义相似性
-- 搜索 "错误处理" 无法匹配 "error handling"
-- 搜索 "用户认证" 无法匹配 "authentication"
+**实现状态**：已完成
 
-**方案**：
+**新增文件**：
+- `crates/knowledge/src/vector.rs` - 向量服务模块
 
-#### 1. 集成向量数据库
-- 推荐使用 Qdrant（轻量、本地运行友好）
-- 或实现简化版本地向量索引
+**新增类型** (`crates/core/src/knowledge.rs`)：
+- `EmbeddingModel` - Embedding 模型类型 (Qwen3, OpenAI, Ollama)
+- `VectorSearchConfig` - 向量搜索配置
+- `KnowledgeEmbedding` - 知识向量缓存
+- `ScoredKnowledge` - 带相似度分数的知识项
+
+**新增 Storage 方法** (`crates/storage/src/trait_.rs`)：
+- `save_vector_embedding()` - 保存向量
+- `load_vector_embedding()` - 加载向量
+- `list_vector_embeddings()` - 列出所有向量
+
+**核心组件**：
+- `OllamaEmbeddingClient` - Ollama Embedding API 客户端
+- `LocalVectorIndex` - 本地向量索引 (Cosine Similarity)
+- `VectorKnowledgeService` - 向量搜索服务 trait
+- `VectorKnowledgeServiceImpl` - 默认实现
+
+**使用方式**：
+```rust
+use devman_knowledge::{VectorKnowledgeService, VectorKnowledgeServiceImpl};
+use devman_storage::JsonStorage;
+
+let storage = Arc::new(Mutex::new(JsonStorage::new(&storage_path).await?));
+let config = VectorSearchConfig {
+    enabled: true,
+    model: EmbeddingModel::Qwen3Embedding0_6B,
+    ollama_url: "http://localhost:11434".to_string(),
+    dimension: 1024,
+    threshold: 0.75,
+};
+
+let vector_service = VectorKnowledgeServiceImpl::new(storage, config);
+vector_service.initialize().await?;
+
+// 搜索
+let results = vector_service.search_by_vector("error handling", 10, 0.75).await?;
+```
+
+**配置**（通过环境变量）：
+- `DEVMAN_OLLAMA_URL` - Ollama 服务地址（默认 http://localhost:11434）
+- `DEVMAN_EMBEDDING_MODEL` - Embedding 模型（默认 qwen3-embedding:0.6b）
+- `DEVMAN_VECTOR_THRESHOLD` - 相似度阈值（默认 0.75）
+
+---
+
+## 待规划功能
 
 #### 2. 数据模型扩展
 ```rust

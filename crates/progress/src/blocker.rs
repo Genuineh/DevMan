@@ -437,6 +437,9 @@ mod tests {
         async fn save_knowledge(&mut self, _knowledge: &devman_core::Knowledge) -> devman_storage::Result<()> { Ok(()) }
         async fn save_quality_check(&mut self, _check: &devman_core::QualityCheck) -> devman_storage::Result<()> { Ok(()) }
         async fn save_event(&mut self, _event: &devman_core::Event) -> devman_storage::Result<()> { Ok(()) }
+        async fn save_vector_embedding(&mut self, _embedding: &devman_core::KnowledgeEmbedding) -> devman_storage::Result<()> { Ok(()) }
+        async fn load_vector_embedding(&self, _knowledge_id: &str) -> devman_storage::Result<Option<devman_core::KnowledgeEmbedding>> { Ok(None) }
+        async fn list_vector_embeddings(&self) -> devman_storage::Result<Vec<devman_core::KnowledgeEmbedding>> { Ok(vec![]) }
         async fn list_goals(&self) -> devman_storage::Result<Vec<devman_core::Goal>> { Ok(vec![]) }
         async fn list_tasks(&self, _filter: &devman_core::TaskFilter) -> devman_storage::Result<Vec<devman_core::Task>> { Ok(vec![]) }
         async fn list_events(&self) -> devman_storage::Result<Vec<devman_core::Event>> { Ok(vec![]) }
@@ -535,6 +538,9 @@ mod tests {
             async fn save_knowledge(&mut self, _knowledge: &devman_core::Knowledge) -> devman_storage::Result<()> { Ok(()) }
             async fn save_quality_check(&mut self, _check: &devman_core::QualityCheck) -> devman_storage::Result<()> { Ok(()) }
             async fn save_event(&mut self, _event: &devman_core::Event) -> devman_storage::Result<()> { Ok(()) }
+            async fn save_vector_embedding(&mut self, _embedding: &devman_core::KnowledgeEmbedding) -> devman_storage::Result<()> { Ok(()) }
+            async fn load_vector_embedding(&self, _knowledge_id: &str) -> devman_storage::Result<Option<devman_core::KnowledgeEmbedding>> { Ok(None) }
+            async fn list_vector_embeddings(&self) -> devman_storage::Result<Vec<devman_core::KnowledgeEmbedding>> { Ok(vec![]) }
             async fn list_goals(&self) -> devman_storage::Result<Vec<devman_core::Goal>> { Ok(vec![]) }
             async fn list_tasks(&self, _filter: &devman_core::TaskFilter) -> devman_storage::Result<Vec<devman_core::Task>> { Ok(vec![]) }
             async fn list_events(&self) -> devman_storage::Result<Vec<devman_core::Event>> { Ok(vec![]) }

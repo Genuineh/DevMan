@@ -7,5 +7,7 @@
 pub mod service;
 pub mod template;
 pub mod classification;
+pub mod vector;
 
 pub use service::{KnowledgeService, BasicKnowledgeService};
+pub use vector::{VectorKnowledgeService, VectorKnowledgeServiceImpl, OllamaEmbeddingClient};
