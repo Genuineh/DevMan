@@ -10,6 +10,70 @@ DevMan MCP Server 为 AI 助手提供工作管理、质量检查、知识检索�
 
 ---
 
+## 配置选项
+
+### 存储后端
+
+DevMan 支持两种存储后端：
+
+| 后端 | 配置文件 | 说明 |
+|------|---------|------|
+| JSON (默认) | `.devman/` 目录 | 文件式存储，轻量无依赖 |
+| SQLite | `.devman/devman.db` | 高性能，推荐生产使用 |
+
+**切换到 SQLite**：
+```bash
+# 首次运行会自动创建 SQLite 数据库
+DEVMAN_STORAGE_BACKEND=sqlite cargo run -p devman-ai
+```
+
+### 向量搜索（可选）
+
+启用语义搜索需要 Ollama 运行：
+
+```bash
+# 启动 Ollama
+ollama serve
+
+# 拉取 Embedding 模型
+ollama pull qwen3-embedding:0.6b
+
+# 拉取 Reranker 模型（可选，提升搜索质量）
+ollama pull qwen3-reranker:0.6b
+```
+
+**环境变量配置**：
+```bash
+# Ollama 地址
+DEVMAN_OLLAMA_URL=http://localhost:11434
+
+# Embedding 模型
+DEVMAN_EMBEDDING_MODEL=qwen3-embedding:0.6b
+
+# Reranker（可选）
+DEVMAN_RERANKER_ENABLED=true
+DEVMAN_RERANKER_MODEL=qwen3-reranker:0.6b
+```
+
+**完整配置示例**：
+```json
+{
+  "devman": {
+    "command": "cargo",
+    "args": ["run", "-p", "devman-ai", "--"],
+    "env": {
+      "DEVMAN_OLLAMA_URL": "http://localhost:11434",
+      "DEVMAN_EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+      "DEVMAN_RERANKER_ENABLED": "true",
+      "DEVMAN_RERANKER_MODEL": "qwen3-reranker:0.6b"
+    },
+    "disabled": false
+  }
+}
+```
+
+---
+
 ## 在 Claude Code 中使用
 
 ### 方式一：直接运行（推荐）
@@ -215,6 +279,55 @@ cargo install --path crates/ai --force
 }
 ```
 
+### 4. 知识搜索（支持向量检索）
+
+```json
+// 简单关键词搜索
+{
+  "name": "devman_search_knowledge",
+  "arguments": {
+    "query": "Rust 异步编程",
+    "limit": 10
+  }
+}
+
+// 向量检索（语义搜索）
+{
+  "name": "devman_search_knowledge",
+  "arguments": {
+    "query": "如何在 Rust 中处理异步错误",
+    "use_vector_search": true,
+    "use_reranker": true,
+    "limit": 5
+  }
+}
+
+// 筛选特定类型
+{
+  "name": "devman_search_knowledge",
+  "arguments": {
+    "query": "JWT 认证",
+    "knowledge_type": "BestPractice",
+    "tags": ["rust", "security"],
+    "use_vector_search": true
+  }
+}
+```
+
+### 5. 保存知识
+
+```json
+{
+  "name": "devman_save_knowledge",
+  "arguments": {
+    "title": "Rust 错误处理最佳实践",
+    "knowledge_type": "BestPractice",
+    "content": "使用 Result<T, E> 而非 panic 处理错误...",
+    "tags": ["rust", "error-handling"]
+  }
+}
+```
+
 ---
 
 ## 完整工具列表
@@ -228,6 +341,7 @@ cargo install --path crates/ai --force
 | **知识** | `devman_review_knowledge` | 查询知识 |
 | | `devman_confirm_knowledge_reviewed` | 确认学习 |
 | | `devman_search_knowledge` | 搜索知识库 |
+| | `devman_save_knowledge` | 保存知识 |
 | **执行** | `devman_start_execution` | 开始执行 |
 | | `devman_log_work` | 记录工作 |
 | | `devman_finish_work` | 提交工作 |
@@ -297,4 +411,4 @@ chmod 777 /tmp/devman.sock
 
 ---
 
-最后更新：2026-02-03
+最后更新：2026-02-04
