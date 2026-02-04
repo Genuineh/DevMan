@@ -362,6 +362,169 @@ fn rrf_fuse(
 
 ## 待规划功能
 
+### feat: SQLite 存储后端替换 JSON
+
+**背景**：
+- 当前 JSON 存储存在关联查询效率问题
+- 复杂过滤需要 O(n) 遍历所有实体
+- 向量搜索由专门向量数据库负责，关系数据需要更好的查询能力
+
+**方案**：
+
+#### 1. 存储架构
+```
+Storage Layer
+├── Storage Trait (抽象接口)
+│   ├── JsonStorage (现有，保留用于兼容)
+│   └── SqliteStorage (新增，推荐使用)
+└── 向量存储 (独立，向量数据库)
+```
+
+#### 2. 数据库设计
+```sql
+-- 实体表
+CREATE TABLE goals (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL,
+    project_id TEXT,
+    metadata TEXT, -- JSON 扩展字段
+    created_at TEXT,
+    updated_at TEXT
+);
+
+CREATE TABLE phases (
+    id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL,
+    metadata TEXT,
+    created_at TEXT,
+    FOREIGN KEY (goal_id) REFERENCES goals(id)
+);
+
+CREATE TABLE tasks (
+    id TEXT PRIMARY KEY,
+    phase_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL,
+    state TEXT NOT NULL, -- JSON 状态机
+    intent TEXT, -- JSON
+    context TEXT, -- JSON
+    depends_on TEXT, -- JSON 数组
+    created_at TEXT,
+    FOREIGN KEY (phase_id) REFERENCES phases(id)
+);
+
+CREATE TABLE work_records (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    events TEXT, -- JSON 事件数组
+    artifacts TEXT, -- JSON
+    outcome TEXT,
+    created_at TEXT,
+    FOREIGN KEY (task_id) REFERENCES tasks(id)
+);
+
+CREATE TABLE knowledge (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    knowledge_type TEXT NOT NULL,
+    content TEXT, -- JSON
+    metadata TEXT, -- JSON
+    tags TEXT, -- JSON 数组
+    related_to TEXT, -- JSON 数组
+    created_at TEXT,
+    updated_at TEXT
+);
+
+CREATE TABLE events (
+    id TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    data TEXT, -- JSON
+    created_at TEXT
+);
+
+-- 索引
+CREATE INDEX idx_tasks_status ON tasks(status);
+CREATE INDEX idx_tasks_phase ON tasks(phase_id);
+CREATE INDEX idx_events_entity ON events(entity_type, entity_id);
+CREATE INDEX idx_knowledge_tags ON knowledge(tags);
+```
+
+#### 3. 迁移策略
+```rust
+// 新增 SqliteStorage，实现 Storage trait
+pub struct SqliteStorage {
+    pool: sqlx::SqlitePool,
+}
+
+#[async_trait]
+impl Storage for SqliteStorage {
+    async fn save_goal(&self, goal: &Goal) -> Result<()>;
+    async fn load_goal(&self, id: &GoalId) -> Result<Option<Goal>>;
+    async fn list_goals(&self, filter: GoalFilter) -> Result<Vec<Goal>>;
+    // ... 类似实现其他方法
+}
+
+// 迁移工具
+pub async fn migrate_from_json(
+    json_storage: &JsonStorage,
+    sqlite_storage: &SqliteStorage,
+) -> Result<()> {
+    // 读取所有 JSON 实体
+    // 写入 SQLite
+    // 验证迁移完整性
+}
+```
+
+#### 4. 查询能力提升
+```rust
+// 复杂查询示例
+impl SqliteStorage {
+    /// 查找所有被阻塞的任务（跨 Phase/Goal）
+    async fn find_blocked_tasks(&self) -> Result<Vec<Task>> {
+        sqlx::query_as!(
+            Task,
+            r#"
+            SELECT t.* FROM tasks t
+            WHERE t.status = 'blocked'
+            ORDER BY t.created_at DESC
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    /// 查找最近活跃的任务（按 WorkRecord 时间）
+    async fn find_recent_active_tasks(&self, limit: usize) -> Result<Vec<Task>> {
+        sqlx::query_as!(
+            Task,
+            r#"
+            SELECT DISTINCT t.* FROM tasks t
+            INNER JOIN work_records wr ON t.id = wr.task_id
+            WHERE wr.created_at > datetime('now', '-7 days')
+            ORDER BY wr.created_at DESC
+            LIMIT ?1
+            "#,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+}
+```
+
+**优先级**：高 - 存储层是核心基础设施
+
+**依赖**：
+- [sqlx](https://github.com/launchbadge/sqlx) - 异步 SQLite 库
+- [rusqlite](https://github.com/rusqlite/rusqlite) - 备选同步库
+
+---
+
 #### 2. 数据模型扩展
 ```rust
 pub struct KnowledgeEmbedding {

@@ -21,16 +21,18 @@ pub enum StorageError {
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
-
-
-    /// Item not found
-    #[error("Not found: {0}")]
-    NotFound(String),
-
     /// Other error
     #[error("{0}")]
     Other(String),
 }
+
+#[cfg(feature = "sqlite")]
+impl From<sqlx::Error> for StorageError {
+    fn from(e: sqlx::Error) -> Self {
+        StorageError::Other(e.to_string())
+    }
+}
+
 
 /// Storage abstraction for DevMan data.
 ///
