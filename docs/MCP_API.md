@@ -1,7 +1,7 @@
 # DevMan MCP Server API Reference
 
-> Version: 1.0.0
-> Last Updated: 2026-02-03
+> Version: 1.1.0
+> Last Updated: 2026-02-04
 > Protocol: MCP 2024-11-05 (JSON-RPC 2.0)
 
 ## 概述
@@ -179,14 +179,18 @@ cargo run -p devman-ai -- --socket /tmp/devman.sock
 
 #### devman_search_knowledge
 
-搜索知识库。
+搜索知识库。支持关键词搜索、向量检索（语义搜索）和 Reranker 重排序。
 
 **输入参数：**
 
 ```json
 {
-  "query": "string",  // 搜索查询（必需）
-  "limit": 10         // 最大返回数量（可选，默认 10）
+  "query": "string",           // 搜索查询（必需）
+  "limit": 10,                 // 最大返回数量（可选，默认 10）
+  "use_vector_search": true,   // 启用向量检索（可选，默认 false）
+  "use_reranker": false,       // 启用 Reranker 重排序（可选，默认 false）
+  "knowledge_type": "BestPractice",  // 知识类型筛选（可选）
+  "tags": ["rust", "error"]    // 标签筛选（可选）
 }
 ```
 
@@ -201,12 +205,44 @@ cargo run -p devman-ai -- --socket /tmp/devman.sock
         "knowledge_id": "kn_01jhvp5q2c1g00000007",
         "title": "Rust 错误处理最佳实践",
         "knowledge_type": "BestPractice",
-        "tags": ["rust", "error-handling"]
+        "summary": "使用 Result<T, E> 而非 panic 处理错误",
+        "tags": ["rust", "error-handling"],
+        "score": 0.95,
+        "search_type": "hybrid"  // "keyword", "vector", 或 "hybrid"
       }
     ],
-    "total_count": 15
+    "total_count": 15,
+    "search_metadata": {
+      "vector_search_enabled": true,
+      "reranker_enabled": false,
+      "query": "Rust 错误处理",
+      "processing_time_ms": 45
+    }
   }
 }
+```
+
+**搜索类型说明**：
+
+| 类型 | 说明 | 适用场景 |
+|------|------|---------|
+| `keyword` | 关键词匹配（TF-IDF） | 精确术语匹配 |
+| `vector` | 向量相似度搜索 | 语义理解查询 |
+| `hybrid` | 两者结合 + Reranker | 最佳相关性结果 |
+
+**配置要求**：
+
+- 向量搜索：需配置 Ollama Embedding 模型（`DEVMAN_OLLAMA_URL`）
+- Reranker：需配置 Ollama Rerank 模型（`DEVMAN_RERANKER_ENABLED`）
+
+**环境变量**：
+
+```bash
+DEVMAN_OLLAMA_URL=http://localhost:11434
+DEVMAN_EMBEDDING_MODEL=qwen3-embedding:0.6b
+DEVMAN_VECTOR_THRESHOLD=0.75
+DEVMAN_RERANKER_ENABLED=true
+DEVMAN_RERANKER_MODEL=qwen3-reranker:0.6b
 ```
 
 ---

@@ -72,7 +72,8 @@ DevMan 是一个面向 AI 的认知工作管理系统，旨在将 AI 的产出�
 │                           ▼                                        │
 │              ┌─────────────────────────┐                           │
 │              │      Storage            │                           │
-│              │   (JsonStorage)         │                           │
+│              │   (JsonStorage/         │                           │
+│              │    SqliteStorage)       │                           │
 │              └─────────────────────────┘                           │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
@@ -113,9 +114,29 @@ Layer 1: Storage & State       (存储与状态)
 
 **组件**:
 - `Storage` trait - 存储抽象接口
-- `JsonStorage` - 文件式 JSON 存储实现
+- `JsonStorage` - 文件式 JSON 存储实现（默认）
+- `SqliteStorage` - SQLite 存储实现（推荐生产使用）
 
-**目录结构**:
+**存储后端对比**:
+
+| 特性 | JsonStorage | SqliteStorage |
+|------|-------------|---------------|
+| 部署方式 | 文件夹 | 单文件 |
+| 查询能力 | O(n) 遍历 | SQL 查询 |
+| 性能 | 一般 | 优秀 |
+| 依赖 | 无 | sqlx |
+| 推荐场景 | 开发/小型项目 | 生产/大数据量 |
+
+**切换存储后端**:
+```rust
+// JSON 存储（默认）
+let storage = JsonStorage::new(".devman").await?;
+
+// SQLite 存储（推荐生产使用）
+let storage = SqliteStorage::new(".devman/devman.db").await?;
+```
+
+**目录结构** (JsonStorage):
 ```
 .devman/
 ├── goals/           # 目标数据
@@ -126,6 +147,7 @@ Layer 1: Storage & State       (存储与状态)
 ├── knowledge/       # 知识数据
 ├── quality/         # 质检数据
 ├── work_records/    # 工作记录
+├── embeddings/      # 向量索引（如果启用向量搜索）
 └── meta/            # 元数据版本标记
     ├── goals/
     ├── projects/
@@ -133,7 +155,7 @@ Layer 1: Storage & State       (存储与状态)
 ```
 
 **关键特性**:
-- 文件式存储，无外部数据库依赖
+- 特征门控: `json` (默认) 或 `sqlite` feature
 - 元数据版本标记（仅保存版本号和时间戳）
 - 完整的快照由项目 Git 仓库管理
 
@@ -251,6 +273,8 @@ struct TimeEstimate {
 - `KnowledgeService` - 知识服务
 - `TemplateRegistry` - 模板注册表
 - `KnowledgeClassifier` - 知识分类器
+- `VectorKnowledgeService` - 向量检索服务（可选）
+- `RerankerService` - 重排序服务（可选）
 
 **知识类型**:
 ```
@@ -263,12 +287,44 @@ KnowledgeType:
 └── Decision         # 决策
 ```
 
+**检索架构**:
+```
+Query → 向量检索 (Top 50) → Reranker 重排序 → Top 10
+```
+
 **检索能力**:
-- 关键词搜索
+- 关键词搜索（TF-IDF 简化版）
 - 标签检索（OR/AND 逻辑）
 - 上下文推荐
 - 相似度匹配
 - 按类型筛选
+- **向量检索**（可选）：语义搜索，支持 Ollama 本地模型
+- **Reranker 重排序**（可选）：两阶段检索，提升相关性
+
+**向量搜索配置**:
+```rust
+let config = VectorSearchConfig {
+    enabled: true,
+    model: EmbeddingModel::Qwen3Embedding0_6B,  // 或 OpenAI
+    ollama_url: "http://localhost:11434",
+    dimension: 1024,
+    threshold: 0.75,  // 相似度阈值
+};
+
+let vector_service = VectorKnowledgeServiceImpl::new(storage.clone(), config);
+vector_service.initialize().await?;
+```
+
+**Reranker 配置**:
+```rust
+let reranker_config = RerankerConfig {
+    enabled: true,
+    model: RerankerModel::Qwen3Reranker0_6B,  // Ollama 本地模型
+    ollama_url: "http://localhost:11434",
+    max_candidates: 50,   // 向量检索候选数
+    final_top_k: 10,      // 最终返回数
+};
+```
 
 ---
 
@@ -294,6 +350,7 @@ DevMan/
 │   ├── storage/           # 存储层
 │   │   ├── trait_.rs      # Storage trait
 │   │   ├── json_storage.rs # JsonStorage 实现
+│   │   ├── sqlite_storage.rs # SqliteStorage 实现 (可选)
 │   │   └── lib.rs
 │   │
 │   ├── work/              # 工作管理 (Layer 2)
@@ -323,6 +380,8 @@ DevMan/
 │   │   ├── template.rs    # TemplateRegistry
 │   │   ├── search.rs      # KnowledgeSearch
 │   │   ├── classification.rs # KnowledgeClassifier
+│   │   ├── vector.rs      # VectorKnowledgeService (可选)
+│   │   ├── reranker.rs    # RerankerService (可选)
 │   │   └── lib.rs
 │   │
 │   ├── tools/             # 工具集成
@@ -601,6 +660,22 @@ let results = futures::future::join_all(
 - 标签索引
 - 关键词缓存
 - 相似度计算的早期终止
+- 向量索引缓存（避免重复计算 embedding）
+- Reranker 批处理优化
+
+### 3. 向量检索优化
+
+```rust
+// 批量生成 embedding
+let embeddings = model.encode_batch(&texts).await?;
+
+// 本地向量索引（余弦相似度）
+let index = LocalVectorIndex::new(dimension);
+index.add_all(embeddings)?;
+
+// 搜索
+let results = index.search(&query_embedding, top_k)?;
+```
 
 ### 3. 存储批量操作
 
@@ -683,4 +758,4 @@ devman-ai --transport socket --port 3000  # socket 传输
 
 ---
 
-*最后更新: 2026-02-02*
+*最后更新: 2026-02-04*

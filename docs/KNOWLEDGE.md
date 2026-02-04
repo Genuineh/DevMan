@@ -8,6 +8,8 @@
 - [知识类型](#知识类型)
 - [创建知识条目](#创建知识条目)
 - [知识检索](#知识检索)
+- [向量搜索](#向量搜索)
+- [Reranker 重排序](#reranker-重排序)
 - [模板系统](#模板系统)
 - [知识分类](#知识分类)
 - [使用统计](#使用统计)
@@ -376,6 +378,197 @@ let and_results = service.search_by_tags(
 
 ---
 
+## 向量搜索
+
+DevMan 支持基于向量的语义搜索，通过将知识内容转换为高维向量，实现语义级别的相似度匹配。
+
+### 架构概述
+
+```
+Query → Ollama Embedding API → Query Vector
+                                   ↓
+Knowledge → Ollama Embedding API → Knowledge Vectors
+                                   ↓
+                          LocalVectorIndex (余弦相似度)
+                                   ↓
+                            Top 50 Candidates
+```
+
+### 配置
+
+**环境变量**：
+
+```bash
+# Ollama 配置
+DEVMAN_OLLAMA_URL=http://localhost:11434
+
+# Embedding 模型
+DEVMAN_EMBEDDING_MODEL=qwen3-embedding:0.6b  # 默认
+# 或: openai-embedding, ollama {name: "other-model"}
+
+# 向量搜索阈值 (0.0-1.0)
+DEVMAN_VECTOR_THRESHOLD=0.75
+```
+
+**代码配置**：
+
+```rust
+use devman_knowledge::VectorKnowledgeServiceImpl;
+use devman_core::{VectorSearchConfig, EmbeddingModel};
+
+let config = VectorSearchConfig {
+    enabled: true,
+    model: EmbeddingModel::Qwen3Embedding0_6B,
+    ollama_url: "http://localhost:11434".to_string(),
+    dimension: 1024,
+    threshold: 0.75,
+};
+
+let vector_service = VectorKnowledgeServiceImpl::new(storage.clone(), config);
+vector_service.initialize().await?;
+```
+
+### 使用向量搜索
+
+```rust
+use devman_knowledge::VectorKnowledgeService;
+
+// 简单向量搜索
+let results = vector_service.search_by_vector(
+    "Rust 异步编程最佳实践",
+    10,     // 返回数量
+    0.75,   // 相似度阈值
+).await?;
+```
+
+### 混合搜索
+
+结合关键词搜索和向量搜索：
+
+```rust
+// 先进行向量搜索获取候选
+let vector_results = vector_service.search_by_vector(query, 50, 0.5).await?;
+
+// 再进行关键词过滤
+let final_results: Vec<_> = vector_results
+    .into_iter()
+    .filter(|r| {
+        let text = r.knowledge.content.summary.to_lowercase();
+        query_terms.iter().all(|t| text.contains(t))
+    })
+    .take(10)
+    .collect();
+```
+
+### 支持的 Embedding 模型
+
+| 模型 | 维度 | 说明 |
+|------|------|------|
+| `Qwen3Embedding0_6B` | 1024 | Ollama 本地模型（默认） |
+| `OpenAIAda002` | 1536 | OpenAI text-embedding-ada-002 |
+| `Ollama { name }` | 可变 | 其他 Ollama 模型 |
+
+### 性能优化
+
+```rust
+// 批量保存带 embedding 的知识
+for knowledge in knowledge_batch {
+    vector_service.save_with_embedding(&knowledge).await?;
+}
+
+// 预计算所有知识向量（初始化时）
+vector_service.initialize().await?;  // 自动计算已有知识的 embedding
+```
+
+---
+
+## Reranker 重排序
+
+Reranker 在向量搜索后对候选结果进行精排，显著提升检索相关性。
+
+### 架构概述
+
+```
+Query → 向量检索 (Top 50) → Reranker 重排序 → Top 10
+```
+
+**两阶段检索优势**：
+1. **粗排阶段**：向量检索快速获取候选集（50条）
+2. **精排阶段**：Reranker 模型精细排序（Top 10）
+
+### 配置
+
+**环境变量**：
+
+```bash
+# Reranker 启用
+DEVMAN_RERANKER_ENABLED=true
+
+# Reranker 模型
+DEVMAN_RERANKER_MODEL=qwen3-reranker:0.6b  # 默认
+# 或: openai-reranker, ollama {name: "other-model"}
+
+# Reranker 参数
+DEVMAN_RERANKER_MAX_CANDIDATES=50   # 粗排候选数
+DEVMAN_RERANKER_FINAL_TOP_K=10      # 精排返回数
+```
+
+**代码配置**：
+
+```rust
+use devman_knowledge::RerankerServiceImpl;
+use devman_core::{RerankerConfig, RerankerModel};
+
+let config = RerankerConfig {
+    enabled: true,
+    model: RerankerModel::Qwen3Reranker0_6B,
+    ollama_url: "http://localhost:11434".to_string(),
+    max_candidates: 50,
+    final_top_k: 10,
+};
+
+let reranker = RerankerServiceImpl::new(config);
+```
+
+### 使用 Reranker
+
+```rust
+use devman_knowledge::HybridKnowledgeService;
+
+let results = hybrid_service.search_hybrid(
+    "Rust 错误处理最佳实践",
+    50,   // 向量搜索候选数
+    10,   // 最终返回数
+).await?;
+```
+
+### Reranker 模型
+
+| 模型 | 说明 |
+|------|------|
+| `Qwen3Reranker0_6B` | Ollama 本地模型（默认） |
+| `OpenAIReranker` | OpenAI Rerank API |
+| `Ollama { name }` | 其他 Ollama 模型 |
+
+### RRF 融合（备选方案）
+
+当 Ollama Rerank API 不可用时，可以使用 Reciprocal Rank Fusion：
+
+```rust
+use devman_knowledge::RRFusion;
+
+let rrf = RRFusion::default();
+
+// 多个检索方法的结果
+let results1 = vector_search_results;   // 向量检索
+let results2 = keyword_search_results;  // 关键词检索
+
+// RRF 融合
+let fused = rrf.fuse(&[results1, results2]);
+```
+
+---
+
 ## 模板系统
 
 ### 创建模板
@@ -739,4 +932,4 @@ fn analyze_work_record(work_record: &WorkRecord) -> Result<Vec<Knowledge>, Strin
 
 ---
 
-*最后更新: 2026-02-02*
+*最后更新: 2026-02-04*
