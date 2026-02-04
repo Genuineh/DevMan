@@ -261,3 +261,69 @@ pub struct ScoredKnowledge {
     /// Similarity score (0.0 - 1.0, higher is more similar)
     pub score: f32,
 }
+
+/// Reranker model type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RerankerModel {
+    /// Qwen3 Reranker (Ollama local)
+    Qwen3Reranker0_6B,
+    /// OpenAI reranker (if available)
+    OpenAIReranker,
+    /// Custom model via Ollama
+    Ollama { name: String },
+}
+
+/// Configuration for reranking.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RerankerConfig {
+    /// Enable reranking
+    pub enabled: bool,
+
+    /// Reranker model to use
+    pub model: RerankerModel,
+
+    /// Ollama server URL
+    #[serde(default = "default_ollama_url")]
+    pub ollama_url: String,
+
+    /// Maximum candidates to rerank (after vector search)
+    #[serde(default = "default_max_candidates")]
+    pub max_candidates: usize,
+
+    /// Final top-k results after reranking
+    #[serde(default = "default_final_top_k")]
+    pub final_top_k: usize,
+}
+
+fn default_max_candidates() -> usize {
+    50
+}
+
+fn default_final_top_k() -> usize {
+    10
+}
+
+impl Default for RerankerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            model: RerankerModel::Qwen3Reranker0_6B,
+            ollama_url: default_ollama_url(),
+            max_candidates: default_max_candidates(),
+            final_top_k: default_final_top_k(),
+        }
+    }
+}
+
+/// Result of a reranking operation.
+#[derive(Debug, Clone)]
+pub struct RerankedKnowledge {
+    /// The knowledge item
+    pub knowledge: Knowledge,
+    /// Reranker score (0.0 - 1.0, higher is more relevant)
+    pub rerank_score: f32,
+    /// Original vector similarity score
+    pub vector_score: Option<f32>,
+    /// Combined score (if using fusion)
+    pub combined_score: Option<f32>,
+}

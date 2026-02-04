@@ -52,6 +52,7 @@ pub use knowledge::{
     Knowledge, KnowledgeType, KnowledgeContent, KnowledgeMetadata,
     UsageStats, Feedback, CodeSnippet, TemplateContent, TemplateParameter,
     EmbeddingModel, VectorSearchConfig, KnowledgeEmbedding, ScoredKnowledge,
+    RerankerModel, RerankerConfig, RerankedKnowledge,
 };
 pub use quality::{
     QualityCheck, QualityCheckType, GenericCheckType, CustomCheckSpec,

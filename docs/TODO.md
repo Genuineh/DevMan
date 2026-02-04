@@ -200,9 +200,60 @@ let results = vector_service.search_by_vector("error handling", 10, 0.75).await?
 
 ---
 
-## 待规划功能
+## 已完成功能
 
-### feat: Reranker 重排序支持 - 检索质量优化
+### feat: Reranker 重排序支持 - 检索质量优化 ✅
+
+**GitHub Issue**: #4
+
+**实现状态**：已完成
+
+**新增文件**：
+- `crates/knowledge/src/reranker.rs` - 重排序服务模块
+
+**新增类型** (`crates/core/src/knowledge.rs`)：
+- `RerankerModel` - Reranker 模型类型 (Qwen3, OpenAI, Ollama)
+- `RerankerConfig` - 重排序配置
+- `RerankedKnowledge` - 带重排序分数的知识项
+
+**核心组件**：
+- `OllamaRerankerClient` - Ollama Rerank API 客户端
+- `RerankerService` - 重排序服务 trait
+- `RerankerServiceImpl` - 默认实现
+- `RRFusion` - Reciprocal Rank Fusion 多检索方法融合
+- `HybridSearchResult` - 混合搜索结果
+
+**两阶段检索架构**：
+```
+Query → 向量检索 (Top 50) → Reranker 重排序 → Top 10
+```
+
+**使用方式**：
+```rust
+use devman_knowledge::{RerankerService, RerankerServiceImpl};
+use devman_core::RerankerConfig;
+
+let config = RerankerConfig {
+    enabled: true,
+    model: RerankerModel::Qwen3Reranker0_6B,
+    ollama_url: "http://localhost:11434".to_string(),
+    max_candidates: 50,
+    final_top_k: 10,
+};
+
+let reranker = RerankerServiceImpl::new(config);
+reranker.rerank(query, &candidates).await?;
+```
+
+**配置**（通过环境变量）：
+- `DEVMAN_RERANKER_ENABLED` - 启用重排序（默认 false）
+- `DEVMAN_RERANKER_MODEL` - Reranker 模型（默认 qwen3-reranker:0.6b）
+- `DEVMAN_RERANKER_MAX_CANDIDATES` - 最大候选数量（默认 50）
+- `DEVMAN_RERANKER_FINAL_TOP_K` - 最终返回数量（默认 10）
+
+---
+
+## 待规划功能
 
 **背景**：
 - 向量搜索基于语义相似性，但可能遗漏细粒度相关性
