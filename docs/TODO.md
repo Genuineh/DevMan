@@ -140,4 +140,64 @@ devman/
 
 ---
 
-*最后更新: 2026-02-02*
+*最后更新: 2026-02-04*
+
+---
+
+## 待规划功能
+
+### feat: 向量检索支持知识服务 - 语义搜索能力
+
+**GitHub Issue**: #3
+
+**背景**：
+- 当前知识服务基于关键词搜索，无法理解语义相似性
+- 搜索 "错误处理" 无法匹配 "error handling"
+- 搜索 "用户认证" 无法匹配 "authentication"
+
+**方案**：
+
+#### 1. 集成向量数据库
+- 推荐使用 Qdrant（轻量、本地运行友好）
+- 或实现简化版本地向量索引
+
+#### 2. 数据模型扩展
+```rust
+pub struct KnowledgeEmbedding {
+    pub knowledge_id: String,
+    pub embedding: Vec<f32>,        // 1536 维 (OpenAI) 或 768 维 (本地模型)
+    pub model: EmbeddingModel,
+}
+
+pub enum EmbeddingModel {
+    OpenAIAda002,      // OpenAI text-embedding-ada-002
+    LocalBGE,           // BAAI/bge-base-en-v1.5 (本地运行)
+    LocalMiniLM,        // sentence-transformers/all-MiniLM-L6-v2
+}
+```
+
+#### 3. API 设计
+```rust
+#[async_trait]
+pub trait VectorKnowledgeService: Send + Sync {
+    /// 保存知识并生成 embedding
+    async fn save_with_embedding(&self, knowledge: Knowledge) -> Result<()>;
+
+    /// 向量相似度搜索
+    async fn search_by_vector(
+        &self,
+        query: &str,
+        limit: usize,
+        threshold: f32,
+    ) -> Result<Vec<Knowledge>>;
+
+    /// 混合搜索（关键词 + 向量）
+    async fn search_hybrid(&self, query: &str, limit: usize) -> Result<Vec<Knowledge>>;
+}
+```
+
+**优先级**：高 - 语义搜索是 AI 知识服务的核心能力
+
+**参考**：
+- [Qdrant Client](https://github.com/qdrant/qdrant-client)
+- [BGE Embeddings](https://huggingface.co/BAAI/bge-base-en-v1.5)
