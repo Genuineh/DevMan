@@ -289,7 +289,15 @@ impl<S: devman_storage::Storage + 'static> VectorKnowledgeService for VectorKnow
             created_at: chrono::Utc::now(),
         };
 
-        // Save to storage
+        // Save knowledge to storage
+        self.storage
+            .lock()
+            .await
+            .save_knowledge(knowledge)
+            .await
+            .context("Failed to save knowledge")?;
+
+        // Save embedding to storage
         self.storage
             .lock()
             .await
@@ -320,12 +328,14 @@ impl<S: devman_storage::Storage + 'static> VectorKnowledgeService for VectorKnow
         // Load knowledge for each result
         let storage = self.storage.lock().await;
         let mut scored_knowledge = Vec::new();
-        for (knowledge_id, score) in results {
-            if let Ok(Some(knowledge)) = storage.load_knowledge(knowledge_id.parse().unwrap_or_default()).await {
-                scored_knowledge.push(ScoredKnowledge {
-                    knowledge,
-                    score,
-                });
+        for (knowledge_id_str, score) in results {
+            if let Ok(knowledge_id) = knowledge_id_str.parse() {
+                if let Ok(Some(knowledge)) = storage.load_knowledge(knowledge_id).await {
+                    scored_knowledge.push(ScoredKnowledge {
+                        knowledge,
+                        score,
+                    });
+                }
             }
         }
 
