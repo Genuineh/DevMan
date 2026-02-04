@@ -3,7 +3,7 @@
 //! This binary provides an MCP (Model Context Protocol) server
 //! for AI assistants to interact with DevMan.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -15,9 +15,9 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 
-    /// Storage path for DevMan data
-    #[arg(short, long, default_value = ".devman")]
-    storage: std::path::PathBuf,
+    /// Storage path for DevMan data (defaults to .devman in current directory)
+    #[arg(short, long)]
+    storage: Option<std::path::PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -46,13 +46,39 @@ fn init_logging(_to_stderr: bool) {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Create storage path
-    std::fs::create_dir_all(&cli.storage).ok();
+    // Storage path resolution priority:
+    // 1. CLI argument (--storage / -s)
+    // 2. Environment variable DEVMAN_STORAGE
+    // 3. Error - user must specify
+    let storage_path = if let Some(path) = cli.storage {
+        path
+    } else if let Ok(env_path) = std::env::var("DEVMAN_STORAGE") {
+        std::path::PathBuf::from(env_path)
+    } else {
+        anyhow::bail!(
+            "Storage path not specified. Please either:\n  1. Run with --storage flag: devman-ai stdio --storage /path/to/project/.devman\n  2. Set DEVMAN_STORAGE env var: DEVMAN_STORAGE=/path/to/project/.devman devman-ai stdio"
+        );
+    };
+
+    // Verify storage path is absolute or can be resolved
+    let storage_path = if storage_path.is_absolute() {
+        storage_path
+    } else {
+        std::env::current_dir()?.join(storage_path)
+    };
+
+    // Create storage directory if it doesn't exist
+    std::fs::create_dir_all(&storage_path).ok();
+
+    // Verify storage is writable
+    let test_file = storage_path.join(".devman_write_test");
+    std::fs::write(&test_file, "test").context("Storage directory is not writable")?;
+    std::fs::remove_file(&test_file).ok();
 
     // Create MCP server
     let mut server = devman_ai::McpServer::with_config(
         devman_ai::McpServerConfig {
-            storage_path: cli.storage.clone(),
+            storage_path: storage_path.clone(),
             server_name: "devman".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             socket_path: None,
@@ -60,7 +86,7 @@ async fn main() -> Result<()> {
     ).await?;
 
     // Initialize AI Interface with real storage-backed implementations
-    let ai_interface = create_ai_interface(&cli.storage).await;
+    let ai_interface = create_ai_interface(&storage_path).await;
     server.set_ai_interface(ai_interface);
 
     match cli.command {
@@ -88,7 +114,7 @@ async fn main() -> Result<()> {
             println!("DevMan MCP Server v{}", env!("CARGO_PKG_VERSION"));
             println!("Protocol: MCP 2024-11-05");
             println!("Transport: stdio / Unix socket");
-            println!("Storage: {}", cli.storage.display());
+            println!("Storage: {}", storage_path.display());
             println!("Tools: {}", server.tools.len());
             println!("Resources: {}", server.resources.len());
         }

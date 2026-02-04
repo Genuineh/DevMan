@@ -38,6 +38,40 @@ fn create_mcp_error_response(
     })
 }
 
+/// Wrap a response in MCP content format.
+/// MCP protocol expects responses with a `content` array containing text items.
+fn create_mcp_content_response<T: Serialize>(data: &T) -> serde_json::Value {
+    let text = serde_json::to_string(data).unwrap_or_else(|_| "{}".to_string());
+    json!({
+        "content": [
+            {
+                "type": "text",
+                "text": text
+            }
+        ]
+    })
+}
+
+/// Wrap a text-only MCP content response.
+fn create_mcp_text_response(text: &str) -> serde_json::Value {
+    json!({
+        "content": [
+            {
+                "type": "text",
+                "text": text
+            }
+        ]
+    })
+}
+
+/// Check if a response is an error (has "success": false or is an error object).
+fn is_mcp_error_response(response: &serde_json::Value) -> bool {
+    if let Some(success) = response.get("success") {
+        return success == false;
+    }
+    false
+}
+
 /// JSON-RPC 2.0 Request wrapper
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonRpcRequest {
@@ -790,7 +824,7 @@ impl McpServer {
         // Check if AI interface is available
         let ai_interface = self.ai_interface.as_ref();
 
-        match name {
+        let result = match name {
             // Goal management - requires AI interface for full functionality
             "devman_create_goal" => {
                 if let Some(ai) = ai_interface {
@@ -988,6 +1022,14 @@ impl McpServer {
                 None,
                 false,
             ),
+        };
+
+        // Wrap non-error responses in MCP content format
+        // Error responses from create_mcp_error_response already have the right format
+        if is_mcp_error_response(&result) {
+            result
+        } else {
+            create_mcp_content_response(&result)
         }
     }
 
